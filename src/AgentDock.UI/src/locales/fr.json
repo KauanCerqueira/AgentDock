@@ -1,0 +1,58 @@
+{
+  "common": {
+    "appName": "AgentDock",
+    "version": "v1.0.0",
+    "loading": "Chargement...",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "create": "Créer",
+    "search": "Rechercher",
+    "filter": "Filtrer",
+    "close": "Fermer",
+    "copy": "Copier",
+    "copied": "Copié!",
+    "clear": "Effacer",
+    "send": "Envoyer",
+    "online": "En ligne",
+    "offline": "Hors ligne"
+  },
+  "nav": {
+    "overview": "Aperçu",
+    "systemMonitor": "Moniteur Système",
+    "analytics": "Analyses",
+    "models": "Modèles",
+    "chat": "Chat",
+    "tasks": "Tâches",
+    "workspaces": "Espaces de Travail",
+    "agentPresets": "Agents Prédéfinis",
+    "snippets": "Extraits",
+    "apiPlayground": "Terrain de Jeu API",
+    "apiAnalytics": "Analyses API",
+    "apiKeys": "Clés API",
+    "settings": "Paramètres"
+  },
+  "dashboard": {
+    "title": "Tableau de Bord",
+    "subtitle": "Vue d'ensemble en temps réel de votre infrastructure IA locale.",
+    "modelRepository": "Dépôt de Modèles",
+    "installed": "Installés",
+    "localStorage": "Stockage local",
+    "systemResources": "Ressources Système",
+    "activeEngine": "Moteur Actif"
+  },
+  "settings": {
+    "title": "Paramètres",
+    "subtitle": "Personnalisez votre expérience AgentDock.",
+    "saveChanges": "Enregistrer les Modifications",
+    "saving": "Enregistrement...",
+    "saved": "Enregistré!",
+    "appearance": "Apparence",
+    "theme": "Thème",
+    "dark": "Sombre",
+    "light": "Clair",
+    "system": "Système",
+    "language": "Langue"
+  }
+}
