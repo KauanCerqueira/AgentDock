@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 export default defineConfig({
     plugins: [react()],
+    base: '/',
     resolve: {
         alias: {
             '@': path.resolve(__dirname, './src'),
@@ -20,6 +21,7 @@ export default defineConfig({
     build: {
         outDir: '../AgentDock.Backend/wwwroot',
         emptyOutDir: true,
-        sourcemap: false,
+        sourcemap: true,
+        minify: false,
     },
 });

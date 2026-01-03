@@ -105,26 +105,29 @@ public class LlamaCppService : ILlamaService
             var jsonData = line.Substring(6); // Remove "data: "
             if (jsonData == "[DONE]") break;
 
+            LlamaStreamChunk? chunk = null;
             try
             {
-                var chunk = JsonSerializer.Deserialize<LlamaStreamChunk>(jsonData);
-                if (chunk?.Choices?[0]?.Delta?.Content != null)
-                {
-                    yield return new ChatResponse
-                    {
-                        Model = request.Model,
-                        Message = new ChatMessage 
-                        { 
-                            Role = "assistant", 
-                            Content = chunk.Choices[0].Delta.Content 
-                        },
-                        Done = false
-                    };
-                }
+                chunk = JsonSerializer.Deserialize<LlamaStreamChunk>(jsonData);
             }
             catch (JsonException ex)
             {
                 _logger.LogWarning(ex, "Failed to parse streaming chunk: {Line}", jsonData);
+                continue;
+            }
+
+            if (chunk?.Choices?[0]?.Delta?.Content != null)
+            {
+                yield return new ChatResponse
+                {
+                    Model = request.Model,
+                    Message = new ChatMessage 
+                    { 
+                        Role = "assistant", 
+                        Content = chunk.Choices[0].Delta.Content 
+                    },
+                    Done = false
+                };
             }
         }
 

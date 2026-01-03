@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 
 namespace AgentDock.DesktopHost.Services;
 
@@ -18,7 +19,7 @@ public class BackendService
         
         if (!Directory.Exists(_backendPath))
         {
-            throw new DirectoryNotFoundException($"Backend não encontrado em: {_backendPath}");
+            throw new DirectoryNotFoundException($"Backend nao encontrado em: {_backendPath}");
         }
     }
 
@@ -39,7 +40,9 @@ public class BackendService
                     UseShellExecute = false,
                     CreateNoWindow = true,
                     RedirectStandardOutput = true,
-                    RedirectStandardError = true
+                    RedirectStandardError = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8
                 };
 
                 _backendProcess = Process.Start(startInfo);
@@ -65,20 +68,20 @@ public class BackendService
         {
             if (!Directory.Exists(_uiPath))
             {
-                System.Diagnostics.Debug.WriteLine("UI não encontrada, pulando build do frontend");
+                System.Diagnostics.Debug.WriteLine("UI nao encontrada, pulando build do frontend");
                 return;
             }
 
             var wwwrootPath = Path.Combine(_backendPath, "wwwroot");
             var indexPath = Path.Combine(wwwrootPath, "index.html");
             
-            // Verifica se já existe build recente (menos de 1 dia)
+            // Verifica se ja existe build recente (menos de 1 dia)
             if (File.Exists(indexPath))
             {
                 var lastModified = File.GetLastWriteTime(indexPath);
                 if ((DateTime.Now - lastModified).TotalHours < 24)
                 {
-                    System.Diagnostics.Debug.WriteLine("Frontend já compilado recentemente (menos de 24h)");
+                    System.Diagnostics.Debug.WriteLine("Frontend ja compilado recentemente (menos de 24h)");
                     return;
                 }
             }
@@ -88,7 +91,7 @@ public class BackendService
             var buildScript = Path.Combine(_solutionRoot, "build-frontend.ps1");
             if (!File.Exists(buildScript))
             {
-                System.Diagnostics.Debug.WriteLine("Script de build não encontrado");
+                System.Diagnostics.Debug.WriteLine("Script de build nao encontrado");
                 return;
             }
 
@@ -100,7 +103,9 @@ public class BackendService
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
-                RedirectStandardError = true
+                RedirectStandardError = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8
             };
 
             using var buildProcess = Process.Start(startInfo);
@@ -120,7 +125,7 @@ public class BackendService
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Aviso: Não foi possível compilar o frontend: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"Aviso: Nao foi possivel compilar o frontend: {ex.Message}");
         }
     }
 
@@ -167,6 +172,6 @@ public class BackendService
             level++;
         }
         
-        throw new FileNotFoundException("Arquivo AgentDock.sln não encontrado na hierarquia de diretórios");
+        throw new FileNotFoundException("Arquivo AgentDock.sln nao encontrado na hierarquia de diretorios");
     }
 }

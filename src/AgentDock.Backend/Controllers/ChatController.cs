@@ -1,6 +1,7 @@
 using AgentDock.Backend.Core.Interfaces;
 using AgentDock.Backend.Core.Models;
 using Microsoft.AspNetCore.Mvc;
+using System.Runtime.CompilerServices;
 
 namespace AgentDock.Backend.Controllers;
 

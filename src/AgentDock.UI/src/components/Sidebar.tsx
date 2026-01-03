@@ -1,21 +1,22 @@
 import { NavLink } from 'react-router-dom'
-import { MessageSquare, CheckCircle, Folder, Settings, Command, Box, LayoutDashboard, Cpu, Activity, TrendingUp, Clipboard, Bot, Play, Key, BarChart3 } from 'lucide-react'
+import { MessageSquare, CheckCircle, Folder, Settings, Command, Box, LayoutDashboard, Cpu, Activity, TrendingUp, Clipboard, Bot, Play, Key, BarChart3, HardDrive } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export default function Sidebar() {
   const navItems = [
-    { path: '/', icon: LayoutDashboard, label: 'Overview' },
-    { path: '/system', icon: Activity, label: 'System Monitor' },
+    { path: '/dashboard', icon: LayoutDashboard, label: 'Overview' },
+    { path: '/system-monitor', icon: Activity, label: 'System Monitor' },
     { path: '/analytics', icon: TrendingUp, label: 'Analytics' },
     { path: '/models', icon: Box, label: 'Models' },
-    { path: '/chat', icon: MessageSquare, label: 'Chat' },
+    { path: '/models/downloaded', icon: HardDrive, label: 'Downloaded Models' },
+    { path: '/chat-new', icon: MessageSquare, label: 'Chat' },
     { path: '/tasks', icon: CheckCircle, label: 'Tasks' },
     { path: '/workspaces', icon: Folder, label: 'Workspaces' },
-    { path: '/presets', icon: Bot, label: 'Agent Presets' },
+    { path: '/agent-presets', icon: Bot, label: 'Agent Presets' },
     { path: '/snippets', icon: Clipboard, label: 'Snippets' },
-    { path: '/api-playground', icon: Play, label: 'API Playground' },
-    { path: '/api-analytics', icon: BarChart3, label: 'API Analytics' },
-    { path: '/api-keys', icon: Key, label: 'API Keys' },
+    { path: '/api/playground', icon: Play, label: 'API Playground' },
+    { path: '/api/analytics', icon: BarChart3, label: 'API Analytics' },
+    { path: '/api/keys', icon: Key, label: 'API Keys' },
     { path: '/settings', icon: Settings, label: 'Settings' },
   ]
 
@@ -68,7 +69,7 @@ export default function Sidebar() {
         <div className="px-2 py-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wider mt-4">
           Workspace
         </div>
-        {navItems.slice(3, 7).map((item) => (
+        {navItems.slice(3, 8).map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
@@ -99,7 +100,7 @@ export default function Sidebar() {
         <div className="px-2 py-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wider mt-4">
           Tools
         </div>
-        {navItems.slice(7, 10).map((item) => (
+        {navItems.slice(8, 10).map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
@@ -130,7 +131,7 @@ export default function Sidebar() {
         <div className="px-2 py-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wider mt-4">
           API
         </div>
-        {navItems.slice(10, 13).map((item) => (
+        {navItems.slice(10, 14).map((item) => (
           <NavLink
             key={item.path}
             to={item.path}

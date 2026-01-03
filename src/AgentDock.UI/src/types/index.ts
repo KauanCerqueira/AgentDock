@@ -138,3 +138,33 @@ export interface AgentPreset {
   isBuiltIn: boolean
   useCount: number
 }
+
+// HuggingFace Model Types
+export interface HFFile {
+  filename: string
+  size: number
+  requirements?: ModelRequirements
+  compatibility?: HardwareCompatibility
+}
+
+export interface ModelRequirements {
+  minRamGb: number
+  recommendedRamGb: number
+  minVramGb: number
+  recommendedVramGb: number
+  requiresGpu: boolean
+  modelSize: string
+  parameterCount: number
+  quantization: string
+  supportedPlatforms: string[]
+}
+
+export interface HardwareCompatibility {
+  canRun: boolean
+  level: 'Excellent' | 'Good' | 'Adequate' | 'Poor' | 'Incompatible'
+  warnings: string[]
+  recommendations: string[]
+  ramUtilizationPercent: number
+  vramUtilizationPercent: number
+  performanceEstimate: string
+}
