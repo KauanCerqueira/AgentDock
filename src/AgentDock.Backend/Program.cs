@@ -1,5 +1,6 @@
 using AgentDock.Backend.Services;
 using AgentDock.Backend.Core.Interfaces;
+using Microsoft.OpenApi.Models;
 using AgentDock.Backend.Infrastructure.Llama;
 using AgentDock.Backend.Infrastructure.HuggingFace;
 
@@ -7,15 +8,18 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", policy =>
+    options.AddPolicy("AllowElectron", policy =>
     {
         policy.AllowAnyOrigin()
               .AllowAnyMethod()
-              .AllowAnyHeader();
+              .AllowAnyHeader()
+              .WithExposedHeaders("Content-Disposition", "Content-Length");
     });
 });
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddApplicationPart(typeof(Program).Assembly)
+    .AddControllersAsServices();
 
 // Register llama.cpp services
 builder.Services.AddHostedService<LlamaLifecycleService>();
@@ -33,9 +37,49 @@ builder.Services.AddSingleton<SystemMonitorService>();
 builder.Services.AddSingleton<LogsService>();
 builder.Services.AddSingleton<SettingsService>();
 builder.Services.AddSingleton<AgentPresetsService>();
+builder.Services.AddSingleton<DownloadSettingsService>();
+builder.Services.AddSingleton<DashboardStatsService>();  // Dashboard stats
+builder.Services.AddSingleton<MockDataService>();
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo 
+    { 
+        Title = "AgentDock API", 
+        Version = "v1",
+        Description = "OpenAI-compatible API for local LLM inference."
+    });
+
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Description = "JWT Authorization header using the Bearer scheme. Example: \"Authorization: Bearer {token}\"",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer"
+    });
+
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            new string[] {}
+        }
+    });
+
+    c.DocInclusionPredicate((docName, apiDesc) =>
+    {
+        return apiDesc.RelativePath != null && apiDesc.RelativePath.StartsWith("v1");
+    });
+});
 
 var app = builder.Build();
 
@@ -72,15 +116,20 @@ _ = Task.Run(async () =>
     }
 });
 
-if (app.Environment.IsDevelopment())
+// Enable Swagger in all environments for this local tool
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "AgentDock API v1");
+    c.RoutePrefix = "swagger";
+    c.InjectStylesheet("/swagger-ui/custom.css");
+    c.DocumentTitle = "AgentDock API";
+});
 
-app.UseCors("AllowAll");
-
-// Log todas as requisições para debug
+app.UseCors("AllowElectron");
+// Add API Key Middleware for OpenAI endpoints
+app.UseMiddleware<AgentDock.Backend.Infrastructure.Middleware.ApiKeyMiddleware>();
+// Log todas as requisiï¿½ï¿½es para debug
 app.Use(async (context, next) =>
 {
     logger.LogInformation("?? {Method} {Path}", context.Request.Method, context.Request.Path);
@@ -106,19 +155,39 @@ if (Directory.Exists(wwwrootPath))
     }
     else
     {
-        logger.LogWarning("?? index.html NÃO encontrado!");
+        logger.LogWarning("?? index.html Nï¿½O encontrado!");
     }
 }
 else
 {
-    logger.LogWarning("?? wwwroot NÃO encontrado!");
+    logger.LogWarning("?? wwwroot Nï¿½O encontrado!");
 }
 
 app.MapControllers();
 
-app.MapFallbackToFile("index.html");
-
-logger.LogInformation("? AgentDock Backend PRONTO em http://localhost:5000");
+// Log todas as rotas registradas
+var endpointDataSource = app.Services.GetRequiredService<EndpointDataSource>();
+logger.LogInformation("========================================");
+logger.LogInformation("?? ROTAS REGISTRADAS:");
+foreach (var endpoint in endpointDataSource.Endpoints)
+{
+    if (endpoint is RouteEndpoint routeEndpoint)
+    {
+        var httpMethods = routeEndpoint.Metadata
+            .OfType<HttpMethodMetadata>()
+            .FirstOrDefault()?.HttpMethods ?? new[] { "ANY" };
+        
+        logger.LogInformation("  {Methods} {Pattern}", 
+            string.Join(", ", httpMethods), 
+            routeEndpoint.RoutePattern.RawText);
+    }
+}
 logger.LogInformation("========================================");
 
-app.Run("http://localhost:5000");
+app.MapFallbackToFile("index.html");
+
+logger.LogInformation("? AgentDock Backend PRONTO em http://0.0.0.0:5000");
+logger.LogInformation("========================================");
+
+Console.WriteLine("Application started");
+await app.RunAsync("http://0.0.0.0:5000");

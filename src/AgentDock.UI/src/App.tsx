@@ -6,11 +6,13 @@ import { Toaster } from '@/components/ui/sonner'
 const Setup = lazy(() => import('@/pages/Setup'))
 const Models = lazy(() => import('@/pages/Models'))
 const Chat = lazy(() => import('@/pages/Chat'))
+const ChatWithModel = lazy(() => import('@/pages/ChatWithModel'))
 const Tasks = lazy(() => import('@/pages/Tasks'))
 const Workspaces = lazy(() => import('@/pages/Workspaces'))
 const Dashboard = lazy(() => import('@/pages/Dashboard'))
 const Settings = lazy(() => import('@/pages/Settings'))
 const Snippets = lazy(() => import('@/pages/Snippets'))
+const Instructions = lazy(() => import('@/pages/Instructions'))
 const AgentPresets = lazy(() => import('@/pages/AgentPresets'))
 const Analytics = lazy(() => import('@/pages/Analytics'))
 const APIKeys = lazy(() => import('@/pages/APIKeys'))
@@ -18,6 +20,9 @@ const APIPlayground = lazy(() => import('@/pages/APIPlayground'))
 const APIAnalytics = lazy(() => import('@/pages/APIAnalytics'))
 const SystemMonitor = lazy(() => import('@/pages/SystemMonitor'))
 const DownloadedModels = lazy(() => import('@/pages/DownloadedModels'))
+const ProcessManager = lazy(() => import('@/pages/ProcessManager'))
+const DownloadSettings = lazy(() => import('@/pages/DownloadSettings'))
+const DownloadManager = lazy(() => import('@/pages/DownloadManager'))
 
 // Simple loading fallback
 function LoadingFallback() {
@@ -31,7 +36,7 @@ function LoadingFallback() {
       color: '#888',
       fontFamily: 'system-ui, sans-serif'
     }}>
-      <div>Carregando página...</div>
+      <div>Carregando pï¿½gina...</div>
     </div>
   )
 }
@@ -51,7 +56,7 @@ class ErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('?? React Error Boundary caught:', error, errorInfo)
+    console.error('? React Error Boundary caught:', error, errorInfo)
   }
 
   render() {
@@ -68,8 +73,8 @@ class ErrorBoundary extends React.Component<
           padding: '2rem'
         }}>
           <div style={{ maxWidth: '600px', textAlign: 'center' }}>
-            <div style={{ fontSize: '48px', marginBottom: '1rem' }}>??</div>
-            <h1 style={{ marginBottom: '1rem' }}>Erro na Aplicação</h1>
+            <div style={{ fontSize: '48px', marginBottom: '1rem' }}>?</div>
+            <h1 style={{ marginBottom: '1rem' }}>Erro na Aplicaï¿½ï¿½o</h1>
             <div style={{ 
               color: '#888', 
               fontSize: '14px',
@@ -96,7 +101,7 @@ class ErrorBoundary extends React.Component<
                 fontSize: '14px'
               }}
             >
-              Recarregar Aplicação
+              Recarregar Aplicaï¿½ï¿½o
             </button>
           </div>
         </div>
@@ -119,18 +124,22 @@ function App() {
               <Route path="/setup" element={<Setup />} />
               <Route path="/models" element={<Models />} />
               <Route path="/models/downloaded" element={<DownloadedModels />} />
+              <Route path="/downloads" element={<DownloadManager />} />
               <Route path="/chat" element={<Chat />} />
-              <Route path="/chat-new" element={<Chat />} />
+              <Route path="/chat-old" element={<ChatWithModel />} />
               <Route path="/tasks" element={<Tasks />} />
               <Route path="/workspaces" element={<Workspaces />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/snippets" element={<Snippets />} />
+              <Route path="/instructions" element={<Instructions />} />
               <Route path="/agent-presets" element={<AgentPresets />} />
               <Route path="/analytics" element={<Analytics />} />
               <Route path="/api/keys" element={<APIKeys />} />
               <Route path="/api/playground" element={<APIPlayground />} />
               <Route path="/api/analytics" element={<APIAnalytics />} />
               <Route path="/system-monitor" element={<SystemMonitor />} />
+              <Route path="/process-manager" element={<ProcessManager />} />
+              <Route path="/download-settings" element={<DownloadSettings />} />
             </Routes>
           </Suspense>
           <Toaster 

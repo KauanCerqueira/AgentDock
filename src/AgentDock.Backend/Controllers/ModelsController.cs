@@ -129,17 +129,174 @@ public class ModelsController : ControllerBase
     /// Inicia download de um modelo do HuggingFace
     /// </summary>
     [HttpPost("download")]
-    public IActionResult StartDownload([FromBody] DownloadRequest request)
+    public async Task<IActionResult> StartDownload([FromBody] DownloadRequest request)
     {
         try
         {
+            if (request == null)
+            {
+                return BadRequest(new { error = "Invalid request body" });
+            }
+
+            _logger.LogInformation("?? Download request received: {ModelId}/{Filename}", request.ModelId, request.Filename);
+            
+            // Verificar se pode baixar (não duplicado)
+            var (canDownload, reason, existingId) = _downloadManager.CanDownload(request.Filename);
+            if (!canDownload)
+            {
+                _logger.LogWarning("?? Cannot download: {Reason}", reason);
+                return Conflict(new 
+                { 
+                    error = reason,
+                    existingDownloadId = existingId,
+                    canDownload = false
+                });
+            }
+            
+            // Verificar espaço em disco
+            var modelsPath = _downloadManager.GetModelsPath();
+            _logger.LogInformation("?? Models path: {Path}", modelsPath);
+
+            try
+            {
+                var pathRoot = Path.GetPathRoot(Path.GetFullPath(modelsPath));
+                if (!string.IsNullOrEmpty(pathRoot))
+                {
+                    var driveInfo = new DriveInfo(pathRoot);
+                    _logger.LogInformation("?? Available disk space: {Space}GB", driveInfo.AvailableFreeSpace / 1024.0 / 1024.0 / 1024.0);
+                    
+                    var files = await _huggingFaceService.ListModelFilesAsync(request.ModelId);
+                    var file = files.FirstOrDefault(f => f.Filename == request.Filename);
+                    
+                    if (file != null)
+                    {
+                        var fileSizeGB = file.SizeBytes / 1024.0 / 1024.0 / 1024.0;
+                        var availableSpaceGB = driveInfo.AvailableFreeSpace / 1024.0 / 1024.0 / 1024.0;
+                        
+                        _logger.LogInformation("?? File size: {Size}GB, Available: {Available}GB", fileSizeGB, availableSpaceGB);
+                        
+                        if (availableSpaceGB < fileSizeGB + 2)
+                        {
+                            _logger.LogWarning("?? Insufficient disk space!");
+                            return BadRequest(new 
+                            { 
+                                error = "Espaço insuficiente em disco",
+                                details = $"Necessário: {fileSizeGB + 2:F1}GB, Disponível: {availableSpaceGB:F1}GB",
+                                requiredGB = fileSizeGB + 2,
+                                availableGB = availableSpaceGB
+                            });
+                        }
+                    }
+                }
+            }
+            catch (Exception diskEx)
+            {
+                _logger.LogWarning(diskEx, "?? Failed to check disk space, proceeding anyway");
+            }
+            
             var downloadId = _downloadManager.QueueDownload(request.ModelId, request.Filename);
-            return Ok(new { downloadId, status = "queued" });
+            
+            if (downloadId == null)
+            {
+                return Conflict(new { error = "Download já está em andamento para este arquivo" });
+            }
+            
+            _logger.LogInformation("? Download queued with ID: {DownloadId}", downloadId);
+            
+            return Ok(new { downloadId, status = "queued", message = "Download iniciado com sucesso" });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error starting download");
+            _logger.LogError(ex, "? Error starting download");
             return StatusCode(500, new { error = "Failed to start download", details = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Lista todos os downloads (ativos, concluídos, falhos)
+    /// </summary>
+    [HttpGet("downloads/all")]
+    public IActionResult GetAllDownloads()
+    {
+        try
+        {
+            var downloads = _downloadManager.GetAllDownloads();
+            return Ok(downloads.Select(d => new
+            {
+                id = d.Id,
+                filename = d.Filename,
+                modelId = d.ModelId,
+                status = d.Status.ToString(),
+                percentComplete = d.PercentComplete,
+                downloadedBytes = d.DownloadedBytes,
+                totalBytes = d.TotalBytes,
+                speedMBps = d.SpeedMBps,
+                errorMessage = d.ErrorMessage,
+                isReadyToUse = d.IsReadyToUse,
+                modelPath = d.ModelPath,
+                queuedAt = d.QueuedAt,
+                startedAt = d.StartedAt,
+                completedAt = d.CompletedAt
+            }));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting all downloads");
+            return StatusCode(500, new { error = "Failed to get downloads", details = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Obtém espaço em disco disponível
+    /// </summary>
+    [HttpGet("disk-space")]
+    public IActionResult GetDiskSpace()
+    {
+        try
+        {
+            var (available, total) = _downloadManager.GetDiskSpace();
+            return Ok(new { available, total });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting disk space");
+            return StatusCode(500, new { error = "Failed to get disk space" });
+        }
+    }
+
+    /// <summary>
+    /// Cancela um download em andamento
+    /// </summary>
+    [HttpPost("download/{downloadId}/cancel")]
+    public IActionResult CancelDownload(string downloadId)
+    {
+        try
+        {
+            _downloadManager.CancelDownload(downloadId);
+            return Ok(new { message = "Download cancelado" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error cancelling download");
+            return StatusCode(500, new { error = "Failed to cancel download" });
+        }
+    }
+
+    /// <summary>
+    /// Remove um download da lista (apenas concluídos ou falhos)
+    /// </summary>
+    [HttpDelete("download/{downloadId}")]
+    public IActionResult RemoveDownload(string downloadId)
+    {
+        try
+        {
+            _downloadManager.RemoveDownload(downloadId);
+            return Ok(new { message = "Download removido" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error removing download");
+            return StatusCode(500, new { error = "Failed to remove download" });
         }
     }
 
@@ -149,25 +306,112 @@ public class ModelsController : ControllerBase
     [HttpGet("download/{downloadId}")]
     public IActionResult GetDownloadStatus(string downloadId)
     {
-        var task = _downloadManager.GetDownloadStatus(downloadId);
-        if (task == null)
+        try
         {
-            return NotFound(new { error = "Download not found" });
-        }
+            var task = _downloadManager.GetDownloadStatus(downloadId);
+            if (task == null)
+            {
+                return NotFound(new { error = "Download not found", downloadId });
+            }
 
-        return Ok(new
+            return Ok(new
+            {
+                id = task.Id,
+                filename = task.Filename,
+                status = task.Status.ToString(),
+                percentComplete = task.PercentComplete,
+                downloadedBytes = task.DownloadedBytes,
+                totalBytes = task.TotalBytes,
+                speedMBps = task.SpeedMBps,
+                errorMessage = task.ErrorMessage,
+                isReadyToUse = task.IsReadyToUse,
+                modelPath = task.ModelPath,
+                isLoadedInLlama = task.IsLoadedInLlama,
+                statusMessage = GetStatusMessage(task)
+            });
+        }
+        catch (Exception ex)
         {
-            task.Id,
-            task.Filename,
-            task.Status,
-            task.PercentComplete,
-            task.DownloadedBytes,
-            task.TotalBytes,
-            task.SpeedMBps,
-            task.ErrorMessage,
-            task.IsReadyToUse,
-            task.ModelPath
-        });
+            _logger.LogError(ex, "Error getting download status for {DownloadId}", downloadId);
+            return StatusCode(500, new { error = "Error getting status" });
+        }
+    }
+    
+    /// <summary>
+    /// Carrega um modelo baixado no llama.cpp
+    /// </summary>
+    [HttpPost("load-model")]
+    public async Task<IActionResult> LoadModel([FromBody] LoadModelRequest request)
+    {
+        try
+        {
+            _logger.LogInformation("?? Loading model into llama.cpp: {Filename}", request.Filename);
+            
+            // Verificar se o arquivo existe
+            var modelsPath = _downloadManager.GetModelsPath();
+            var filePath = System.IO.Path.Combine(modelsPath, request.Filename);
+            
+            if (!System.IO.File.Exists(filePath))
+            {
+                return NotFound(new
+                {
+                    error = "Model file not found",
+                    filename = request.Filename,
+                    path = filePath
+                });
+            }
+            
+            // Carregar no llama.cpp
+            var result = await _llamaService.LoadModelAsync(request.Filename, CancellationToken.None);
+            
+            if (result)
+            {
+                _logger.LogInformation("? Model loaded successfully");
+                
+                return Ok(new
+                {
+                    success = true,
+                    message = "Modelo carregado com sucesso no llama.cpp",
+                    filename = request.Filename
+                });
+            }
+            else
+            {
+                _logger.LogWarning("??  Failed to load model");
+                
+                return BadRequest(new
+                {
+                    success = false,
+                    error = "Failed to load model",
+                    details = "llama.cpp returned false"
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "? Error loading model");
+            return StatusCode(500, new
+            {
+                success = false,
+                error = "Error loading model",
+                details = ex.Message
+            });
+        }
+    }
+    
+    private string GetStatusMessage(DownloadTask task)
+    {
+        return task.Status switch
+        {
+            DownloadStatus.Queued => "Na fila para download",
+            DownloadStatus.Downloading => $"Baixando... {task.PercentComplete:F1}%",
+            DownloadStatus.Completed when task.IsLoadedInLlama => "? Pronto para usar (carregado no llama.cpp)",
+            DownloadStatus.Completed when task.IsReadyToUse => "? Baixado (clique para carregar no llama.cpp)",
+            DownloadStatus.Completed => "? Download concluído",
+            DownloadStatus.Failed => $"? Erro: {task.ErrorMessage}",
+            DownloadStatus.Cancelled => "?? Cancelado",
+            _ => "Status desconhecido"
+        };
     }
 
     /// <summary>
@@ -222,6 +466,44 @@ public class ModelsController : ControllerBase
         {
             _logger.LogError(ex, "Error getting downloaded models");
             return StatusCode(500, new { error = "Failed to get downloaded models", details = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Exclui um modelo baixado
+    /// </summary>
+    [HttpDelete("delete/{filename}")]
+    public IActionResult DeleteModel(string filename)
+    {
+        try
+        {
+            _logger.LogInformation("??? Delete request for model: {Filename}", filename);
+            
+            var modelsPath = _downloadManager.GetModelsPath();
+            var filePath = Path.Combine(modelsPath, filename);
+            
+            if (!System.IO.File.Exists(filePath))
+            {
+                _logger.LogWarning("Model file not found: {Path}", filePath);
+                return NotFound(new { error = "Modelo não encontrado", filename, path = filePath });
+            }
+            
+            // Deletar o arquivo
+            System.IO.File.Delete(filePath);
+            
+            _logger.LogInformation("? Model deleted: {Filename}", filename);
+            
+            return Ok(new { success = true, message = "Modelo excluído com sucesso", filename });
+        }
+        catch (IOException ex)
+        {
+            _logger.LogError(ex, "Error deleting model - file may be in use");
+            return StatusCode(500, new { error = "Não foi possível excluir o modelo", details = "O arquivo pode estar em uso. Feche qualquer aplicação que esteja usando o modelo e tente novamente." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting model: {Filename}", filename);
+            return StatusCode(500, new { error = "Erro ao excluir modelo", details = ex.Message });
         }
     }
 
@@ -361,4 +643,9 @@ public class CompatibilityCheckRequest
 {
     public string Filename { get; set; } = string.Empty;
     public long SizeBytes { get; set; }
+}
+
+public class LoadModelRequest
+{
+    public string Filename { get; set; } = string.Empty;
 }

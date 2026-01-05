@@ -25,6 +25,44 @@ export interface Workspace {
   path: string
   status: 'Ready' | 'Indexing' | 'Indexed'
   fileCount?: number
+  createdAt?: string
+  sizeBytes?: number
+  tags?: string[]
+  groupId?: string
+  files?: WorkspaceFile[]
+}
+
+export interface WorkspaceFile {
+  id: string
+  name: string
+  path: string
+  extension: string
+  sizeBytes: number
+  modifiedAt: string
+  isDirectory: boolean
+  tags: string[]
+  previewUrl?: string
+  indexedContent?: string
+}
+
+export interface WorkspaceGroup {
+  id: string
+  name: string
+  description: string
+  workspaceIds?: string[]
+  createdAt?: string
+}
+
+export interface SystemInstruction {
+  id: string
+  name: string
+  description: string
+  content: string
+  order: number
+  isEnabled: boolean
+  createdAt: string
+  updatedAt: string
+  category: 'general' | 'coding' | 'analysis' | 'custom'
 }
 
 export interface EngineHealth {

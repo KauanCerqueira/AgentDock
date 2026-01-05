@@ -34,14 +34,31 @@ public class HuggingFaceModel
 
 public class HuggingFaceFile
 {
+    [JsonPropertyName("path")]
+    public string? Path { get; set; }
+    
     [JsonPropertyName("rfilename")]
-    public string Filename { get; set; } = string.Empty;
+    public string? RFilename { get; set; }
+    
+    [JsonPropertyName("filename")]
+    public string? FileName { get; set; }
 
     [JsonPropertyName("size")]
     public long Size { get; set; }
 
     [JsonPropertyName("lfs")]
     public LfsInfo? Lfs { get; set; }
+    
+    // Nome do arquivo consolidado
+    [JsonIgnore]
+    public string Filename => Path ?? RFilename ?? FileName ?? string.Empty;
+    
+    // Tamanho formatado
+    public string SizeFormatted { get; set; } = string.Empty;
+    
+    // Tamanho em bytes (pode vir do LFS ou do campo size direto)
+    [JsonIgnore]
+    public long SizeBytes => Lfs?.Size ?? Size;
     
     // Requisitos específicos do arquivo
     public ModelRequirements? Requirements { get; set; }
@@ -195,21 +212,86 @@ public class HuggingFaceService
     {
         try
         {
-            var url = $"https://huggingface.co/api/models/{modelId}/tree/main";
-            var response = await _httpClient.GetFromJsonAsync<List<HuggingFaceFile>>(url);
-            var ggufFiles = response?.Where(f => f.Filename.EndsWith(".gguf")).ToList() ?? new();
+            _logger.LogInformation("?? Fetching files for model: {ModelId}", modelId);
             
-            // Calcular requisitos para cada arquivo
+            var url = $"https://huggingface.co/api/models/{modelId}/tree/main";
+            _logger.LogInformation("?? Request URL: {Url}", url);
+            
+            HttpResponseMessage httpResponse;
+            try
+            {
+                httpResponse = await _httpClient.GetAsync(url);
+                _logger.LogInformation("?? Response Status: {StatusCode}", httpResponse.StatusCode);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "? HTTP request failed for {ModelId}", modelId);
+                return new List<HuggingFaceFile>();
+            }
+
+            if (!httpResponse.IsSuccessStatusCode)
+            {
+                var errorContent = await httpResponse.Content.ReadAsStringAsync();
+                _logger.LogError("? HuggingFace API error for {ModelId}: {Status} - {Content}", 
+                    modelId, httpResponse.StatusCode, errorContent);
+                return new List<HuggingFaceFile>();
+            }
+
+            var responseContent = await httpResponse.Content.ReadAsStringAsync();
+            _logger.LogInformation("?? Response length: {Length} chars", responseContent.Length);
+
+            List<HuggingFaceFile>? response;
+            try
+            {
+                response = JsonSerializer.Deserialize<List<HuggingFaceFile>>(responseContent);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "? JSON deserialization failed for {ModelId}. Content: {Content}", 
+                    modelId, responseContent.Substring(0, Math.Min(500, responseContent.Length)));
+                return new List<HuggingFaceFile>();
+            }
+            
+            if (response == null)
+            {
+                _logger.LogWarning("?? Empty response from HuggingFace for {ModelId}", modelId);
+                return new List<HuggingFaceFile>();
+            }
+            
+            _logger.LogInformation("?? Total files returned: {Count}", response.Count);
+            
+            // Filtrar apenas arquivos GGUF
+            var ggufFiles = response
+                .Where(f => !string.IsNullOrEmpty(f.Filename) && f.Filename.EndsWith(".gguf", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            
+            _logger.LogInformation("? Found {Count} GGUF files for {ModelId}", ggufFiles.Count, modelId);
+            
+            if (ggufFiles.Count == 0)
+            {
+                _logger.LogWarning("?? No .gguf files found for {ModelId}. All files: {Files}", 
+                    modelId, 
+                    string.Join(", ", response.Take(10).Select(f => f.Filename ?? "null")));
+            }
+            
+            // Calcular requisitos e formatar tamanho para cada arquivo
             foreach (var file in ggufFiles)
             {
-                file.Requirements = CalculateRequirements(file.Filename, file.Size);
+                file.SizeFormatted = FormatSize(file.SizeBytes);
+                file.Requirements = CalculateRequirements(file.Filename, file.SizeBytes);
+                
+                _logger.LogDebug("  ?? File: {Filename}, Size: {Size}, Params: {Params}B, Quant: {Quant}", 
+                    file.Filename, 
+                    file.SizeFormatted, 
+                    file.Requirements.ParameterCount,
+                    file.Requirements.Quantization);
             }
             
             return ggufFiles;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error listing model files for {ModelId}", modelId);
+            _logger.LogError(ex, "?? Unexpected error listing model files for {ModelId}", modelId);
             return new List<HuggingFaceFile>();
         }
     }

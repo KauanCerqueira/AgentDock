@@ -15,6 +15,9 @@ public class ModelDownloadManager
     private readonly ConcurrentDictionary<string, DownloadTask> _activeDownloads = new();
     private readonly ConcurrentQueue<DownloadTask> _downloadQueue = new();
     private readonly SemaphoreSlim _downloadSemaphore = new(1, 1); // 1 download por vez
+    
+    // HashSet para rastrear arquivos sendo baixados (evitar duplicatas)
+    private readonly ConcurrentDictionary<string, string> _downloadingFiles = new();
 
     public ModelDownloadManager(
         HuggingFaceService huggingFaceService,
@@ -26,38 +29,110 @@ public class ModelDownloadManager
         _llamaService = llamaService;
         _logger = logger;
         
-        // Usar diretório de modelos do llama.cpp
-        var llamaConfig = configuration.GetSection("Llama");
-        var customPath = llamaConfig.GetValue<string>("ModelsPath");
-        
-        if (!string.IsNullOrEmpty(customPath))
+        try
         {
-            _modelsPath = customPath;
-        }
-        else
-        {
-            // Fallback: usar diretório padrão do llama.cpp
-            var llamaPath = llamaConfig.GetValue<string>("ExecutablePath") ?? "";
-            if (!string.IsNullOrEmpty(llamaPath))
+            // Usar diretório de modelos do llama.cpp
+            var llamaConfig = configuration.GetSection("Llama");
+            var customPath = llamaConfig.GetValue<string>("ModelsPath");
+            
+            if (!string.IsNullOrEmpty(customPath))
             {
-                var llamaDir = Path.GetDirectoryName(llamaPath);
-                _modelsPath = Path.Combine(llamaDir!, "models");
+                _modelsPath = customPath;
+                _logger.LogInformation("Using custom models path from configuration: {Path}", customPath);
             }
             else
             {
-                _modelsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "llama.cpp", "models");
+                // Fallback: usar diretório padrão do llama.cpp
+                var llamaPath = llamaConfig.GetValue<string>("ExecutablePath");
+                
+                if (!string.IsNullOrEmpty(llamaPath) && File.Exists(llamaPath))
+                {
+                    var llamaDir = Path.GetDirectoryName(llamaPath);
+                    if (!string.IsNullOrEmpty(llamaDir))
+                    {
+                        _modelsPath = Path.Combine(llamaDir, "models");
+                        _logger.LogInformation("Using llama.cpp models directory: {Path}", _modelsPath);
+                    }
+                    else
+                    {
+                        _modelsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "llama.cpp", "models");
+                        _logger.LogWarning("Could not determine llama directory, using default: {Path}", _modelsPath);
+                    }
+                }
+                else
+                {
+                    _modelsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "llama.cpp", "models");
+                    _logger.LogInformation("Using default models path: {Path}", _modelsPath);
+                }
             }
+            
+            // Garantir que o diretório existe
+            Directory.CreateDirectory(_modelsPath);
+            _logger.LogInformation("? Models directory ready: {ModelsPath}", _modelsPath);
+            
+            // Iniciar worker de download
+            _ = Task.Run(ProcessDownloadQueueAsync);
+            _logger.LogInformation("? Download queue processor started");
         }
-        
-        Directory.CreateDirectory(_modelsPath);
-        _logger.LogInformation("Models will be downloaded to: {ModelsPath}", _modelsPath);
-
-        // Iniciar worker de download
-        _ = Task.Run(ProcessDownloadQueueAsync);
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "? Error initializing ModelDownloadManager");
+            
+            // Fallback de emergência
+            _modelsPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "AgentDock",
+                "models"
+            );
+            Directory.CreateDirectory(_modelsPath);
+            _logger.LogWarning("Using emergency fallback path: {Path}", _modelsPath);
+            
+            // Ainda iniciar o worker
+            _ = Task.Run(ProcessDownloadQueueAsync);
+        }
     }
 
-    public string QueueDownload(string modelId, string filename)
+    /// <summary>
+    /// Verifica se um arquivo já está sendo baixado ou já existe
+    /// </summary>
+    public (bool canDownload, string reason, string? existingDownloadId) CanDownload(string filename)
     {
+        // Verificar se já existe o arquivo completo
+        var filePath = Path.Combine(_modelsPath, filename);
+        if (File.Exists(filePath))
+        {
+            return (false, "Modelo já foi baixado anteriormente", null);
+        }
+        
+        // Verificar se está na fila ou em download
+        if (_downloadingFiles.TryGetValue(filename, out var existingId))
+        {
+            return (false, "Download já está em andamento", existingId);
+        }
+        
+        // Verificar downloads ativos
+        var activeDownload = _activeDownloads.Values
+            .FirstOrDefault(d => d.Filename == filename && 
+                (d.Status == DownloadStatus.Downloading || d.Status == DownloadStatus.Queued));
+        
+        if (activeDownload != null)
+        {
+            return (false, "Download já está em andamento", activeDownload.Id);
+        }
+        
+        return (true, "OK", null);
+    }
+
+    public string? QueueDownload(string modelId, string filename)
+    {
+        // Verificar se pode baixar
+        var (canDownload, reason, existingId) = CanDownload(filename);
+        if (!canDownload)
+        {
+            _logger.LogWarning("?? Cannot queue download: {Reason}", reason);
+            return existingId; // Retorna o ID do download existente
+        }
+        
         var downloadId = Guid.NewGuid().ToString();
         var task = new DownloadTask
         {
@@ -68,10 +143,13 @@ public class ModelDownloadManager
             QueuedAt = DateTime.UtcNow
         };
 
+        // Marcar arquivo como sendo baixado
+        _downloadingFiles[filename] = downloadId;
+        
         _downloadQueue.Enqueue(task);
         _activeDownloads[downloadId] = task;
 
-        _logger.LogInformation("Queued download: {ModelId}/{Filename} (ID: {DownloadId})", modelId, filename, downloadId);
+        _logger.LogInformation("? Queued download: {ModelId}/{Filename} (ID: {DownloadId})", modelId, filename, downloadId);
 
         return downloadId;
     }
@@ -84,7 +162,9 @@ public class ModelDownloadManager
 
     public List<DownloadTask> GetAllDownloads()
     {
-        return _activeDownloads.Values.ToList();
+        return _activeDownloads.Values
+            .OrderByDescending(d => d.QueuedAt)
+            .ToList();
     }
 
     public void CancelDownload(string downloadId)
@@ -93,10 +173,45 @@ public class ModelDownloadManager
         {
             task.CancellationTokenSource?.Cancel();
             task.Status = DownloadStatus.Cancelled;
+            
+            // Remover do tracking de downloads
+            _downloadingFiles.TryRemove(task.Filename, out _);
+            
+            _logger.LogInformation("?? Download cancelled: {Filename}", task.Filename);
+        }
+    }
+
+    public void RemoveDownload(string downloadId)
+    {
+        if (_activeDownloads.TryRemove(downloadId, out var task))
+        {
+            _downloadingFiles.TryRemove(task.Filename, out _);
+            _logger.LogInformation("??? Download removed from list: {Filename}", task.Filename);
         }
     }
 
     public string GetModelsPath() => _modelsPath;
+
+    public (double availableGb, double totalGb) GetDiskSpace()
+    {
+        try
+        {
+            var pathRoot = Path.GetPathRoot(Path.GetFullPath(_modelsPath));
+            if (!string.IsNullOrEmpty(pathRoot))
+            {
+                var driveInfo = new DriveInfo(pathRoot);
+                return (
+                    driveInfo.AvailableFreeSpace / 1024.0 / 1024.0 / 1024.0,
+                    driveInfo.TotalSize / 1024.0 / 1024.0 / 1024.0
+                );
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to get disk space");
+        }
+        return (0, 0);
+    }
 
     private async Task ProcessDownloadQueueAsync()
     {
@@ -115,6 +230,12 @@ public class ModelDownloadManager
                     finally
                     {
                         _downloadSemaphore.Release();
+                        
+                        // Remover do tracking quando terminar (sucesso ou falha)
+                        if (task.Status != DownloadStatus.Downloading && task.Status != DownloadStatus.Queued)
+                        {
+                            _downloadingFiles.TryRemove(task.Filename, out _);
+                        }
                     }
                 }
                 else
@@ -148,7 +269,7 @@ public class ModelDownloadManager
 
         try
         {
-            _logger.LogInformation("Downloading {Filename} to {Path}", task.Filename, destinationPath);
+            _logger.LogInformation("?? Downloading {Filename} to {Path}", task.Filename, destinationPath);
             
             await _huggingFaceService.DownloadModelAsync(
                 task.ModelId,
@@ -158,40 +279,54 @@ public class ModelDownloadManager
                 task.CancellationTokenSource.Token
             );
 
+            // Marcar como completo IMEDIATAMENTE
             task.Status = DownloadStatus.Completed;
             task.CompletedAt = DateTime.UtcNow;
             task.FilePath = destinationPath;
+            task.ModelPath = destinationPath;
+            task.IsReadyToUse = true;
+            task.IsLoadedInLlama = false;
 
-            _logger.LogInformation("Download completed: {Filename} -> {Path}", task.Filename, destinationPath);
+            _logger.LogInformation("? Download completed: {Filename} -> {Path}", task.Filename, destinationPath);
 
-            // Tentar carregar o modelo no llama.cpp automaticamente
-            try
+            if (File.Exists(destinationPath))
             {
-                _logger.LogInformation("Attempting to load model into llama.cpp: {Filename}", task.Filename);
-                
-                // Aguardar um pouco para garantir que o arquivo está completamente gravado
-                await Task.Delay(2000);
-                
-                // O llama.cpp detectará automaticamente novos modelos no diretório
-                // Vamos apenas registrar que está disponível
-                task.IsReadyToUse = true;
-                task.ModelPath = destinationPath;
-                
-                _logger.LogInformation("Model ready for use: {Filename}", task.Filename);
+                var fileInfo = new FileInfo(destinationPath);
+                _logger.LogInformation("?? File verified: {Size} MB", fileInfo.Length / 1024.0 / 1024.0);
             }
-            catch (Exception ex)
+            else
             {
-                _logger.LogWarning(ex, "Model downloaded but could not auto-load: {Filename}", task.Filename);
-                task.IsReadyToUse = true; // Ainda está pronto, só não foi auto-carregado
-                task.ModelPath = destinationPath;
+                _logger.LogError("? Downloaded file not found: {Path}", destinationPath);
+                task.ErrorMessage = "Arquivo não encontrado após download";
             }
+
+            // Carregar no llama.cpp em background
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    _logger.LogInformation("?? Loading model in background: {Filename}", task.Filename);
+                    await Task.Delay(2000);
+                    
+                    var loadResult = await _llamaService.LoadModelAsync(task.Filename, CancellationToken.None);
+                    task.IsLoadedInLlama = loadResult;
+                    
+                    if (loadResult)
+                    {
+                        _logger.LogInformation("? Model loaded in llama.cpp: {Filename}", task.Filename);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "?? Background load failed: {Filename}", task.Filename);
+                }
+            });
         }
         catch (OperationCanceledException)
         {
             task.Status = DownloadStatus.Cancelled;
-            _logger.LogWarning("Download cancelled: {Filename}", task.Filename);
+            _logger.LogWarning("?? Download cancelled: {Filename}", task.Filename);
             
-            // Limpar arquivo parcial
             if (File.Exists(destinationPath))
             {
                 try { File.Delete(destinationPath); } catch { }
@@ -201,9 +336,8 @@ public class ModelDownloadManager
         {
             task.Status = DownloadStatus.Failed;
             task.ErrorMessage = ex.Message;
-            _logger.LogError(ex, "Download failed: {Filename}", task.Filename);
+            _logger.LogError(ex, "? Download failed: {Filename}", task.Filename);
             
-            // Limpar arquivo parcial
             if (File.Exists(destinationPath))
             {
                 try { File.Delete(destinationPath); } catch { }
@@ -240,9 +374,9 @@ public class DownloadTask
     public string? ErrorMessage { get; set; }
     public CancellationTokenSource? CancellationTokenSource { get; set; }
     
-    // Novo: Indicadores de prontidão
     public bool IsReadyToUse { get; set; }
     public string? ModelPath { get; set; }
+    public bool IsLoadedInLlama { get; set; }
 }
 
 public enum DownloadStatus

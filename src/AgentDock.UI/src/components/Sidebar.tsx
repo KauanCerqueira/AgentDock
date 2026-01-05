@@ -1,19 +1,21 @@
 import { NavLink } from 'react-router-dom'
-import { MessageSquare, CheckCircle, Folder, Settings, Command, Box, LayoutDashboard, Cpu, Activity, TrendingUp, Clipboard, Bot, Play, Key, BarChart3, HardDrive } from 'lucide-react'
+import { MessageSquare, CheckCircle, Folder, Settings, Command, Box, LayoutDashboard, Cpu, Activity, TrendingUp, Bot, Play, Key, BarChart3, HardDrive, ListOrdered, BookOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export default function Sidebar() {
   const navItems = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Overview' },
     { path: '/system-monitor', icon: Activity, label: 'System Monitor' },
+    { path: '/process-manager', icon: Cpu, label: 'Process Manager' },
     { path: '/analytics', icon: TrendingUp, label: 'Analytics' },
-    { path: '/models', icon: Box, label: 'Models' },
-    { path: '/models/downloaded', icon: HardDrive, label: 'Downloaded Models' },
-    { path: '/chat-new', icon: MessageSquare, label: 'Chat' },
+    { path: '/models', icon: Box, label: 'Browse Models' },
+    { path: '/models/downloaded', icon: HardDrive, label: 'My Models' },
+    { path: '/downloads', icon: ListOrdered, label: 'Downloads' },
+    { path: '/chat', icon: MessageSquare, label: 'Chat' },
     { path: '/tasks', icon: CheckCircle, label: 'Tasks' },
     { path: '/workspaces', icon: Folder, label: 'Workspaces' },
     { path: '/agent-presets', icon: Bot, label: 'Agent Presets' },
-    { path: '/snippets', icon: Clipboard, label: 'Snippets' },
+    { path: '/instructions', icon: BookOpen, label: 'Instructions' },
     { path: '/api/playground', icon: Play, label: 'API Playground' },
     { path: '/api/analytics', icon: BarChart3, label: 'API Analytics' },
     { path: '/api/keys', icon: Key, label: 'API Keys' },
@@ -38,7 +40,38 @@ export default function Sidebar() {
         <div className="px-2 py-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
           Platform
         </div>
-        {navItems.slice(0, 3).map((item) => (
+        {navItems.slice(0, 4).map((item) => (
+          <NavLink
+            key={item.path}
+            to={item.path}
+            className={({ isActive }) =>
+              cn(
+                "flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm transition-all duration-200 group",
+                isActive
+                  ? "bg-accent text-accent-foreground font-medium"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+              )
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <item.icon 
+                  size={16}
+                  className={cn(
+                    "transition-colors",
+                    isActive ? "text-foreground" : "text-muted-foreground group-hover:text-foreground"
+                  )} 
+                />
+                <span>{item.label}</span>
+              </>
+            )}
+          </NavLink>
+        ))}
+
+        <div className="px-2 py-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wider mt-4">
+          Models & Chat
+        </div>
+        {navItems.slice(4, 8).map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
@@ -69,38 +102,7 @@ export default function Sidebar() {
         <div className="px-2 py-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wider mt-4">
           Workspace
         </div>
-        {navItems.slice(3, 8).map((item) => (
-          <NavLink
-            key={item.path}
-            to={item.path}
-            className={({ isActive }) =>
-              cn(
-                "flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm transition-all duration-200 group",
-                isActive
-                  ? "bg-accent text-accent-foreground font-medium"
-                  : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
-              )
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <item.icon 
-                  size={16}
-                  className={cn(
-                    "transition-colors",
-                    isActive ? "text-foreground" : "text-muted-foreground group-hover:text-foreground"
-                  )} 
-                />
-                <span>{item.label}</span>
-              </>
-            )}
-          </NavLink>
-        ))}
-
-        <div className="px-2 py-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wider mt-4">
-          Tools
-        </div>
-        {navItems.slice(8, 10).map((item) => (
+        {navItems.slice(8, 12).map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
@@ -131,7 +133,7 @@ export default function Sidebar() {
         <div className="px-2 py-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wider mt-4">
           API
         </div>
-        {navItems.slice(10, 14).map((item) => (
+        {navItems.slice(12, 16).map((item) => (
           <NavLink
             key={item.path}
             to={item.path}

@@ -1,0 +1,114 @@
+{
+  "name": "agentdock",
+  "version": "1.0.0",
+  "description": "Open-source local AI development platform with OpenAI-compatible API",
+  "main": "electron/main.js",
+  "author": "Kauan Cerqueira",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/KauanCerqueira/AgentDock.git"
+  },
+  "homepage": "https://github.com/KauanCerqueira/AgentDock",
+  "bugs": {
+    "url": "https://github.com/KauanCerqueira/AgentDock/issues"
+  },
+  "scripts": {
+    "start": "electron .",
+    "setup": "pwsh -File setup.ps1",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:ui\" \"npm run dev:electron\"",
+    "dev:backend": "cd src/AgentDock.Backend && dotnet watch run",
+    "dev:ui": "cd src/AgentDock.UI && npm run dev",
+    "dev:electron": "wait-on http://localhost:5173 && electron . --no-cache",
+    "build": "npm run build:backend && npm run build:ui && npm run pack",
+    "build:backend": "cd src/AgentDock.Backend && dotnet publish -c Release -o bin/Release/net8.0/publish",
+    "build:ui": "cd src/AgentDock.UI && npm run build",
+    "pack": "electron-builder --publish never",
+    "dist": "npm run build",
+    "clean": "rimraf dist && cd src/AgentDock.Backend && dotnet clean && cd ../../ && cd src/AgentDock.UI && npm run clean",
+    "clean:all": "npm run clean && rimraf node_modules src/AgentDock.Backend/bin src/AgentDock.Backend/obj"
+  },
+  "dependencies": {
+    "electron-log": "^5.0.0",
+    "electron-store": "^8.1.0"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.0",
+    "concurrently": "^8.2.2",
+    "wait-on": "^7.2.0",
+    "rimraf": "^5.0.5"
+  },
+  "build": {
+    "appId": "com.agentdock.app",
+    "productName": "AgentDock",
+    "directories": {
+      "output": "dist",
+      "buildResources": "electron/assets"
+    },
+    "files": [
+      "electron/**/*",
+      "src/AgentDock.Backend/bin/Release/net8.0/publish/**/*",
+      "package.json",
+      "!src/AgentDock.Backend",
+      "!src/AgentDock.UI",
+      "!**/.git",
+      "!**/.gitignore",
+      "!**/node_modules/*/.bin",
+      "!**/node_modules/*/test",
+      "!**/node_modules/*/tests"
+    ],
+    "extraResources": [
+      {
+        "from": "src/AgentDock.Backend/bin/Release/net8.0/publish",
+        "to": "backend",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "llama.cpp",
+        "to": "llama.cpp",
+        "filter": ["config.json", "models", "cpu/**/*", "cuda-12.4/**/*", "cuda-13.1/**/*"]
+      }
+    ],
+    "win": {
+      "target": ["nsis", "portable"],
+      "icon": "electron/assets/icon.ico",
+      "certificateFile": null,
+      "certificatePassword": null
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "AgentDock"
+    },
+    "portable": {
+      "artifactName": "AgentDock-${version}-portable.exe"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "icon": "electron/assets/icon.png",
+      "category": "Development"
+    },
+    "appImage": {
+      "artifactName": "AgentDock-${version}.${ext}"
+    },
+    "deb": {
+      "depends": ["gconf2", "gconf-service", "libappindicator1", "libnotify4", "libxtst6", "xdg-utils"]
+    },
+    "mac": {
+      "target": ["dmg", "zip"],
+      "icon": "electron/assets/icon.icns",
+      "category": "public.app-category.developer-tools",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "contents": [
+        {"x": 110, "y": 150, "type": "file"},
+        {"x": 240, "y": 150, "type": "link", "path": "/Applications"}
+      ]
+    }
+  }
+}

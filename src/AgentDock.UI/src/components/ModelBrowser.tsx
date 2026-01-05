@@ -52,10 +52,20 @@ export default function ModelBrowser({ onClose }: { onClose: () => void }) {
 
   const loadModelFiles = async (modelId: string) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/models/huggingface/${encodeURIComponent(modelId)}/files`)
+      const response = await fetch(`http://localhost:5000/api/models/huggingface-files?modelId=${encodeURIComponent(modelId)}`)
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
       const data = await response.json()
-      setFiles(data)
+      // Corrigir campo filename que vem como 'path' da API
+      const filesWithFilename = data.map((file: any) => ({
+        ...file,
+        filename: file.filename || file.path,
+        size: file.size || file.lfs?.size || 0
+      }))
+      setFiles(filesWithFilename)
     } catch (error) {
+      console.error('Error loading model files:', error)
       toast.error('Failed to load model files')
     }
   }

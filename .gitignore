@@ -1,3 +1,4 @@
+# Build outputs
 bin/
 obj/
 .vs/
@@ -6,3 +7,65 @@ obj/
 .DS_Store
 node_modules/
 dist/
+out/
+
+# .NET specific
+*.dll
+*.exe
+*.pdb
+*.so
+*.dylib
+!electron/*.exe
+project.assets.json
+project.fragment.lock.json
+artifacts/
+[Dd]ebug/
+[Rr]elease/
+
+# Large binaries (will be downloaded on setup)
+llama.cpp/
+!llama.cpp/models/
+!llama.cpp/models/.gitkeep
+
+# Models (users download their own)
+src/AgentDock.Backend/models/*.gguf
+*.gguf
+*.bin
+
+# Binaries - all executables and libraries
+*.dll
+*.exe
+*.so
+*.dylib
+!electron/*.exe
+
+# OS files
+Thumbs.db
+*.log
+*.bak
+*.tmp
+*.cache
+*.swp
+*.swo
+*~
+
+# IDE
+.idea/
+*.sublime-*
+.history/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+*.env
+
+# Package manager locks (opcional - remover se quiser commitá-los)
+# package-lock.json
+# yarn.lock
+
+# Test & Coverage
+coverage/
+*.cover
+.coverage
+htmlcov/

@@ -61,3 +61,25 @@
 #*.PDF   diff=astextplain
 #*.rtf   diff=astextplain
 #*.RTF   diff=astextplain
+
+###############################################################################
+# AgentDock specific - AI models and binaries
+###############################################################################
+
+# AI Models (large binary files - don't diff)
+*.gguf binary -diff
+*.bin binary -diff
+*.pt binary -diff
+*.safetensors binary -diff
+*.onnx binary -diff
+
+# Binaries that shouldn't be in git (but if they are, mark as binary)
+*.dll binary
+*.exe binary
+*.so binary
+*.dylib binary
+
+# Prevent from being exported in git archive
+.github export-ignore
+docs export-ignore
+*.md export-ignore

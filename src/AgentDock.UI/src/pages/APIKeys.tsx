@@ -1,69 +1,76 @@
-import { useState } from 'react'
-import { Key, Plus, Copy, Trash2, Check, Eye, EyeOff } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Key, Plus, Copy, Trash2, Check, Eye, EyeOff, Loader2 } from 'lucide-react'
 import Layout from '@/components/Layout'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { api } from '@/api/client'
+import { toast } from 'sonner'
 
 interface APIKey {
   id: string
   key: string
   name: string
-  createdAt: Date
-  lastUsed?: Date
+  createdAt: string
+  lastUsed?: string
   requestCount: number
   isActive: boolean
 }
 
 export default function APIKeys() {
-  const [keys, setKeys] = useState<APIKey[]>([
-    {
-      id: '1',
-      key: 'agdk_1234567890abcdefghijklmnopqrstuvwxyz',
-      name: 'Development Key',
-      createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-      lastUsed: new Date(Date.now() - 2 * 60 * 60 * 1000),
-      requestCount: 1234,
-      isActive: true,
-    },
-    {
-      id: '2',
-      key: 'agdk_abcdefghijklmnopqrstuvwxyz1234567890',
-      name: 'Production Key',
-      createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-      lastUsed: new Date(Date.now() - 1 * 60 * 60 * 1000),
-      requestCount: 5678,
-      isActive: true,
-    },
-  ])
+  const [keys, setKeys] = useState<APIKey[]>([])
+  const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [newKeyName, setNewKeyName] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set())
 
-  const handleCreate = () => {
-    const newKey: APIKey = {
-      id: Date.now().toString(),
-      key: `agdk_${Math.random().toString(36).substring(2)}${Math.random().toString(36).substring(2)}`,
-      name: newKeyName || 'Unnamed Key',
-      createdAt: new Date(),
-      requestCount: 0,
-      isActive: true,
+  useEffect(() => {
+    fetchKeys()
+  }, [])
+
+  const fetchKeys = async () => {
+    try {
+      const data = await api.getAPIKeys()
+      setKeys(data)
+    } catch (error) {
+      console.error('Failed to fetch API keys:', error)
+      toast.error('Failed to load API keys')
+    } finally {
+      setLoading(false)
     }
-    setKeys([...keys, newKey])
-    setNewKeyName('')
-    setShowCreate(false)
+  }
+
+  const handleCreate = async () => {
+    try {
+      const newKey = await api.createAPIKey(newKeyName || 'Unnamed Key')
+      setKeys([...keys, newKey])
+      setNewKeyName('')
+      setShowCreate(false)
+      toast.success('API key created successfully')
+    } catch (error) {
+      console.error('Failed to create API key:', error)
+      toast.error('Failed to create API key')
+    }
   }
 
   const handleCopy = (key: APIKey) => {
     navigator.clipboard.writeText(key.key)
     setCopiedId(key.id)
+    toast.success('Key copied to clipboard')
     setTimeout(() => setCopiedId(null), 2000)
   }
 
-  const handleRevoke = (id: string) => {
-    setKeys(keys.map((k) => (k.id === id ? { ...k, isActive: false } : k)))
+  const handleRevoke = async (id: string) => {
+    try {
+      await api.revokeAPIKey(id)
+      setKeys(keys.map((k) => (k.id === id ? { ...k, isActive: false } : k)))
+      toast.success('API key revoked')
+    } catch (error) {
+      console.error('Failed to revoke API key:', error)
+      toast.error('Failed to revoke API key')
+    }
   }
 
   const toggleVisibility = (id: string) => {
@@ -79,10 +86,11 @@ export default function APIKeys() {
   }
 
   const maskKey = (key: string) => {
-    return `${key.substring(0, 12)}${'•'.repeat(20)}${key.substring(key.length - 4)}`
+    return `${key.substring(0, 12)}${'ï¿½'.repeat(20)}${key.substring(key.length - 4)}`
   }
 
-  const formatDate = (date: Date) => {
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
     const now = new Date()
     const diff = now.getTime() - date.getTime()
     const days = Math.floor(diff / (1000 * 60 * 60 * 24))
@@ -93,6 +101,16 @@ export default function APIKeys() {
     if (hours > 0) return `${hours}h ago`
     if (minutes > 0) return `${minutes}m ago`
     return 'just now'
+  }
+
+  if (loading) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="w-8 h-8 animate-spin text-foreground" />
+        </div>
+      </Layout>
+    )
   }
 
   return (
@@ -162,7 +180,7 @@ export default function APIKeys() {
                         <span>Created {formatDate(key.createdAt)}</span>
                         {key.lastUsed && (
                           <>
-                            <span>•</span>
+                            <span>ï¿½</span>
                             <span>Last used {formatDate(key.lastUsed)}</span>
                           </>
                         )}

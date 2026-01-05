@@ -60,6 +60,12 @@ public class ModelRecommendationService
             MinParams = 2,
             Strengths = new() { "Muito rápido", "Pouca RAM", "Boa qualidade" }
         },
+        ["tinyllama"] = new() { 
+            Name = "TinyLlama 1.1B", 
+            UseCase = "Modelo ultra-compacto para hardware muito limitado",
+            MinParams = 1,
+            Strengths = new() { "Extremamente rápido", "Mínimo de RAM", "Bom para testes" }
+        },
         ["neural-chat"] = new() { 
             Name = "Neural Chat", 
             UseCase = "Conversação natural",
@@ -86,25 +92,54 @@ public class ModelRecommendationService
         var systemStats = _systemMonitor.GetSystemStats();
         var suggestions = new List<ModelSuggestion>();
 
-        _logger.LogInformation("Generating suggestions for hardware: {RAM}GB RAM, {GPU}", 
+        _logger.LogInformation("=== INICIANDO GERAÇÃO DE SUGESTÕES ===");
+        _logger.LogInformation("Hardware: {RAM}GB RAM disponível, {TotalRAM}GB RAM total", 
             systemStats.AvailableMemoryGb, 
-            systemStats.GpuInfo?.Name ?? "No GPU");
+            systemStats.TotalMemoryGb);
+        _logger.LogInformation("GPU: {GPU}", 
+            systemStats.GpuInfo?.Name ?? "Nenhuma GPU detectada");
 
         // Determinar categoria de hardware
         var hardwareCategory = DetermineHardwareCategory(systemStats);
+        _logger.LogInformation("Categoria de hardware determinada: {Category}", hardwareCategory);
 
         // Buscar modelos recomendados baseado no hardware
         var recommendedModelIds = GetRecommendedModelIds(hardwareCategory, useCase);
+        _logger.LogInformation("Modelos recomendados para buscar: {Count} modelos", recommendedModelIds.Count);
+        foreach (var modelId in recommendedModelIds)
+        {
+            _logger.LogInformation("  - {ModelId}", modelId);
+        }
+
+        var processedCount = 0;
+        var errorCount = 0;
+        var compatibleCount = 0;
 
         foreach (var modelId in recommendedModelIds)
         {
             try
             {
+                processedCount++;
+                _logger.LogInformation("[{Current}/{Total}] Buscando arquivos para: {ModelId}", 
+                    processedCount, recommendedModelIds.Count, modelId);
+                
                 var files = await _huggingFaceService.ListModelFilesAsync(modelId);
+                
+                _logger.LogInformation("  ? Encontrados {Count} arquivos GGUF", files.Count);
+                
+                if (files.Count == 0)
+                {
+                    _logger.LogWarning("  ?? Nenhum arquivo GGUF encontrado para {ModelId}", modelId);
+                    continue;
+                }
                 
                 foreach (var file in files)
                 {
-                    if (file.Requirements == null) continue;
+                    if (file.Requirements == null)
+                    {
+                        _logger.LogWarning("  ?? Arquivo sem requirements: {Filename}", file.Filename);
+                        continue;
+                    }
 
                     var compatibility = _huggingFaceService.CheckCompatibility(
                         file.Requirements,
@@ -115,8 +150,15 @@ public class ModelRecommendationService
                     // Calcular score baseado em compatibilidade e hardware
                     var score = CalculateScore(file.Requirements, compatibility, hardwareCategory);
 
-                    if (compatibility.CanRun && score > 50) // Apenas modelos viáveis
+                    _logger.LogInformation("    Arquivo: {Filename}", file.Filename);
+                    _logger.LogInformation("      RAM necessária: {RAM}GB, Compatibilidade: {Level}, Score: {Score}", 
+                        file.Requirements.MinRamGb, 
+                        compatibility.Level, 
+                        score);
+
+                    if (compatibility.CanRun && score > 50)
                     {
+                        compatibleCount++;
                         var suggestion = CreateSuggestion(
                             modelId, 
                             file, 
@@ -126,20 +168,98 @@ public class ModelRecommendationService
                         );
 
                         suggestions.Add(suggestion);
+                        _logger.LogInformation("      ? ADICIONADO como sugestão (Score: {Score})", score);
+                    }
+                    else
+                    {
+                        _logger.LogInformation("      ? Rejeitado - CanRun: {CanRun}, Score: {Score}", 
+                            compatibility.CanRun, score);
+                        if (compatibility.Warnings.Any())
+                        {
+                            _logger.LogInformation("      Avisos: {Warnings}", 
+                                string.Join(", ", compatibility.Warnings));
+                        }
                     }
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to get suggestions for {ModelId}", modelId);
+                errorCount++;
+                _logger.LogError(ex, "? Erro ao buscar sugestões para {ModelId}: {Error}", 
+                    modelId, ex.Message);
+            }
+        }
+
+        _logger.LogInformation("=== RESULTADO FINAL ===");
+        _logger.LogInformation("Modelos processados: {Processed}/{Total}", processedCount, recommendedModelIds.Count);
+        _logger.LogInformation("Erros encontrados: {Errors}", errorCount);
+        _logger.LogInformation("Arquivos compatíveis encontrados: {Compatible}", compatibleCount);
+        _logger.LogInformation("Sugestões geradas: {Suggestions}", suggestions.Count);
+
+        // Se não encontrou nenhuma sugestão, tentar modelos fallback
+        if (suggestions.Count == 0)
+        {
+            _logger.LogWarning("?? Nenhuma sugestão encontrada com modelos primários. Tentando fallback...");
+            
+            var fallbackModels = new List<string>
+            {
+                "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF",  // Muito compacto, funciona em qualquer hardware
+                "TheBloke/phi-2-GGUF"                       // Compacto e de alta qualidade
+            };
+
+            foreach (var fallbackModel in fallbackModels)
+            {
+                try
+                {
+                    _logger.LogInformation("Tentando fallback: {ModelId}", fallbackModel);
+                    var files = await _huggingFaceService.ListModelFilesAsync(fallbackModel);
+                    
+                    foreach (var file in files)
+                    {
+                        if (file.Requirements == null) continue;
+
+                        var compatibility = _huggingFaceService.CheckCompatibility(
+                            file.Requirements,
+                            systemStats.AvailableMemoryGb,
+                            systemStats.GpuInfo?.MemoryTotalGb
+                        );
+
+                        if (compatibility.CanRun)
+                        {
+                            var score = CalculateScore(file.Requirements, compatibility, hardwareCategory);
+                            var suggestion = CreateSuggestion(fallbackModel, file, compatibility, hardwareCategory, score);
+                            suggestions.Add(suggestion);
+                            _logger.LogInformation("  ? Fallback adicionado: {Filename} (Score: {Score})", file.Filename, score);
+                            
+                            if (suggestions.Count >= maxSuggestions)
+                                break;
+                        }
+                    }
+                    
+                    if (suggestions.Count >= maxSuggestions)
+                        break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Fallback falhou para {ModelId}", fallbackModel);
+                }
             }
         }
 
         // Ordenar por score e retornar top N
-        return suggestions
+        var result = suggestions
             .OrderByDescending(s => s.Score)
             .Take(maxSuggestions)
             .ToList();
+
+        _logger.LogInformation("Retornando top {Count} sugestões", result.Count);
+        foreach (var suggestion in result)
+        {
+            _logger.LogInformation("  ? {ModelId} / {Filename} (Score: {Score})", 
+                suggestion.ModelId, suggestion.Filename, suggestion.Score);
+        }
+
+        return result;
     }
 
     private HardwareCategory DetermineHardwareCategory(SystemStats stats)
@@ -167,38 +287,41 @@ public class ModelRecommendationService
     {
         var models = new List<string>();
 
-        // Modelos base recomendados por categoria
+        // Modelos GGUF recomendados por categoria
+        // Usando repositórios TheBloke que contêm conversões GGUF
         switch (category)
         {
             case HardwareCategory.High:
                 models.AddRange(new[] { 
-                    "meta-llama/Llama-2-13b-chat-hf",
-                    "mistralai/Mistral-7B-Instruct-v0.2",
-                    "codellama/CodeLlama-13b-Instruct-hf"
+                    "TheBloke/Llama-2-13B-chat-GGUF",
+                    "TheBloke/Mistral-7B-Instruct-v0.2-GGUF",
+                    "TheBloke/CodeLlama-13B-Instruct-GGUF"
                 });
                 break;
             
             case HardwareCategory.MediumHigh:
             case HardwareCategory.Medium:
                 models.AddRange(new[] { 
-                    "meta-llama/Llama-2-7b-chat-hf",
-                    "mistralai/Mistral-7B-Instruct-v0.2",
-                    "codellama/CodeLlama-7b-Instruct-hf",
-                    "Intel/neural-chat-7b-v3-1"
+                    "TheBloke/Llama-2-7B-Chat-GGUF",
+                    "TheBloke/Mistral-7B-Instruct-v0.2-GGUF",
+                    "TheBloke/CodeLlama-7B-Instruct-GGUF",
+                    "TheBloke/neural-chat-7B-v3-1-GGUF"
                 });
                 break;
             
             case HardwareCategory.Low:
                 models.AddRange(new[] { 
-                    "microsoft/phi-2",
-                    "meta-llama/Llama-2-7b-chat-hf",
-                    "mistralai/Mistral-7B-Instruct-v0.2"
+                    "TheBloke/phi-2-GGUF",
+                    "TheBloke/Llama-2-7B-Chat-GGUF",
+                    "TheBloke/Mistral-7B-Instruct-v0.2-GGUF",
+                    "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF"
                 });
                 break;
             
             case HardwareCategory.VeryLow:
                 models.AddRange(new[] { 
-                    "microsoft/phi-2"
+                    "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF",
+                    "TheBloke/phi-2-GGUF"
                 });
                 break;
         }
@@ -208,9 +331,10 @@ public class ModelRecommendationService
         {
             if (useCase.ToLower().Contains("code") || useCase.ToLower().Contains("program"))
             {
-                models = models.Where(m => m.Contains("codellama", StringComparison.OrdinalIgnoreCase)).ToList();
+                models = models.Where(m => m.Contains("codellama", StringComparison.OrdinalIgnoreCase) || 
+                                          m.Contains("code", StringComparison.OrdinalIgnoreCase)).ToList();
                 if (models.Count == 0)
-                    models.Add("codellama/CodeLlama-7b-Instruct-hf");
+                    models.Add("TheBloke/CodeLlama-7B-Instruct-GGUF");
             }
         }
 

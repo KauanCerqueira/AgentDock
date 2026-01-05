@@ -167,6 +167,63 @@ export default function Models() {
       return
     }
 
+    // Encontrar o arquivo para verificar compatibilidade
+    const file = modelFiles.find(f => f.filename === filename)
+    
+    if (file) {
+      // 1. VERIFICAR ESPAÇO EM DISCO - será verificado no backend
+      
+      // 2. VERIFICAR COMPATIBILIDADE DE HARDWARE
+      if (file.compatibility && !file.compatibility.canRun) {
+        toast.error('Hardware Incompatível', {
+          description: `Este modelo requer ${file.requirements?.minRamGb}GB RAM, você tem ${hardwareInfo?.availableRamGb.toFixed(1)}GB disponível`,
+          duration: 5000
+        })
+        return
+      }
+      
+      // 3. AVISAR SE SPECS ESTÃO DISTANTES (mas permitir download)
+      if (file.compatibility && file.compatibility.level === 'Poor') {
+        const confirmed = window.confirm(
+          `?? ATENÇÃO: Hardware Inadequado!\n\n` +
+          `Este modelo NÃO é recomendado para seu hardware:\n\n` +
+          `• Modelo: ${filename}\n` +
+          `• Tamanho: ${file.sizeFormatted}\n` +
+          `• RAM requerida: ${file.requirements?.recommendedRamGb}GB\n` +
+          `• RAM disponível: ${hardwareInfo?.availableRamGb.toFixed(1)}GB\n\n` +
+          `Performance esperada:\n` +
+          `${file.compatibility.performanceEstimate}\n\n` +
+          `?? O modelo pode:\n` +
+          `• Rodar MUITO LENTO (0.5-2 tokens/seg)\n` +
+          `• Travar seu sistema\n` +
+          `• Usar muita memória swap\n` +
+          `• Demorar 30+ segundos para responder\n\n` +
+          `Deseja REALMENTE baixar mesmo assim?\n` +
+          `(Recomendamos escolher um modelo menor)`
+        )
+        
+        if (!confirmed) {
+          toast.info('Download cancelado', {
+            description: 'Escolha um modelo compatível com seu hardware'
+          })
+          return
+        }
+        
+        toast.warning('Download iniciado com hardware inadequado', {
+          description: 'Performance será muito limitada',
+          duration: 5000
+        })
+      }
+      
+      // 4. AVISAR SE SPECS ESTÃO NO LIMITE (mas permitir)
+      if (file.compatibility && file.compatibility.level === 'Adequate') {
+        toast.warning('Hardware no Limite', {
+          description: `Este modelo pode rodar lento. RAM: ${file.requirements?.recommendedRamGb}GB requeridos, você tem ${hardwareInfo?.availableRamGb.toFixed(1)}GB`,
+          duration: 4000
+        })
+      }
+    }
+
     try {
       const response = await fetch('http://localhost:5000/api/models/download', {
         method: 'POST',
@@ -174,7 +231,20 @@ export default function Models() {
         body: JSON.stringify({ modelId: selectedModel, filename })
       })
 
-      if (!response.ok) throw new Error('Download failed')
+      if (!response.ok) {
+        const error = await response.json()
+        
+        // Tratar erro de espaço em disco especificamente
+        if (error.error === 'Espaço insuficiente em disco') {
+          toast.error('? Espaço Insuficiente em Disco', {
+            description: `Necessário: ${error.requiredGB?.toFixed(1)}GB, Disponível: ${error.availableGB?.toFixed(1)}GB. Libere espaço e tente novamente.`,
+            duration: 8000
+          })
+          return
+        }
+        
+        throw new Error(error.error || error.details || 'Download failed')
+      }
       
       const { downloadId } = await response.json()
       toast.success('Download iniciado!', {
@@ -224,8 +294,11 @@ export default function Models() {
           clearInterval(pollInterval)
         }
       }, 1000)
-    } catch (error) {
-      toast.error('Erro ao iniciar download')
+    } catch (error: any) {
+      console.error('Download error:', error)
+      toast.error('Erro ao iniciar download', {
+        description: error.message || 'Tente novamente'
+      })
     }
   }
 

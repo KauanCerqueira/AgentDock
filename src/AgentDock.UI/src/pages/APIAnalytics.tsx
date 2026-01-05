@@ -1,8 +1,9 @@
-import { useState } from 'react'
-import { BarChart3, TrendingUp, Zap, Clock, Hash, Activity } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { BarChart3, TrendingUp, Zap, Clock, Hash, Activity, Loader2 } from 'lucide-react'
 import Layout from '@/components/Layout'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { api } from '@/api/client'
 
 interface APIStats {
   totalRequests: number
@@ -16,24 +17,23 @@ interface APIStats {
 
 export default function APIAnalytics() {
   const [timeRange, setTimeRange] = useState<'24h' | '7d' | '30d'>('24h')
-  const [stats] = useState<APIStats>({
-    totalRequests: 15432,
-    totalTokens: 2450000,
-    avgResponseTime: 1.8,
-    successRate: 99.2,
-    topModels: [
-      { model: 'llama2', count: 9876, percentage: 64 },
-      { model: 'codellama', count: 3456, percentage: 22 },
-      { model: 'mistral', count: 1543, percentage: 10 },
-      { model: 'neural-chat', count: 557, percentage: 4 },
-    ],
-    topEndpoints: [
-      { endpoint: '/api/v1/chat', count: 12345, percentage: 80 },
-      { endpoint: '/api/v1/completions', count: 2468, percentage: 16 },
-      { endpoint: '/api/v1/context', count: 619, percentage: 4 },
-    ],
-    requestsByHour: [45, 52, 38, 65, 78, 92, 105, 120, 135, 142, 138, 125, 110, 95, 88, 102, 115, 128, 140, 135, 120, 95, 75, 58],
-  })
+  const [stats, setStats] = useState<APIStats | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      setLoading(true)
+      try {
+        const data = await api.getAnalytics(timeRange)
+        setStats(data)
+      } catch (error) {
+        console.error('Failed to fetch analytics:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchAnalytics()
+  }, [timeRange])
 
   const renderMiniChart = (data: number[], color: string) => {
     const max = Math.max(...data)
@@ -47,6 +47,16 @@ export default function APIAnalytics() {
           />
         ))}
       </div>
+    )
+  }
+
+  if (loading || !stats) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="w-8 h-8 animate-spin text-foreground" />
+        </div>
+      </Layout>
     )
   }
 
