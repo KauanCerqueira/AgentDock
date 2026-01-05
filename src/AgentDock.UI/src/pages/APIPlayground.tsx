@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Play, Trash2, Settings2, FileText, Zap, Copy, Check, ExternalLink, Terminal, Loader2 } from 'lucide-react'
+import { FileText, Zap, Copy, Check, ExternalLink, Terminal, Loader2 } from 'lucide-react'
 import Layout from '@/components/Layout'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -15,7 +15,7 @@ interface Model {
 
 export default function APIPlayground() {
   const [copied, setCopied] = useState(false)
-  const [models, setModels] = useState<Model[]>([])
+  const [, setModels] = useState<Model[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedModel, setSelectedModel] = useState<string>('tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf')
 

@@ -1,0 +1,9 @@
+import { c as createLucideIcon } from "./card-Dttt0EL0.js";
+const ArrowRight = createLucideIcon("ArrowRight", [
+  ["path", { d: "M5 12h14", key: "1ays0h" }],
+  ["path", { d: "m12 5 7 7-7 7", key: "xquz4c" }]
+]);
+export {
+  ArrowRight as A
+};
+//# sourceMappingURL=arrow-right-D-ZisH7y.js.map
