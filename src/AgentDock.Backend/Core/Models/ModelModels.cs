@@ -1,13 +1,14 @@
 namespace AgentDock.Backend.Core.Models;
 
 /// <summary>
-/// Informações sobre um modelo instalado no Ollama
+/// Informaï¿½ï¿½es sobre um modelo instalado no Ollama
 /// </summary>
 public class ModelInfo
 {
     public string Name { get; set; } = string.Empty;
     public string ModifiedAt { get; set; } = string.Empty;
     public long Size { get; set; }
+    public string Path { get; set; } = string.Empty;
     public string Digest { get; set; } = string.Empty;
     public ModelDetails? Details { get; set; }
 }
@@ -29,7 +30,7 @@ public class ListModelsResponse
 }
 
 /// <summary>
-/// Requisição para baixar/puxar um modelo
+/// Requisiï¿½ï¿½o para baixar/puxar um modelo
 /// </summary>
 public class PullModelRequest
 {

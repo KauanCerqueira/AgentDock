@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using AgentDock.Backend.Core.Interfaces;
+using Microsoft.Extensions.Hosting;
 
 namespace AgentDock.Backend.Infrastructure.HuggingFace;
 
@@ -23,7 +24,8 @@ public class ModelDownloadManager
         HuggingFaceService huggingFaceService,
         ILlamaService llamaService,
         ILogger<ModelDownloadManager> logger,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IHostEnvironment environment)
     {
         _huggingFaceService = huggingFaceService;
         _llamaService = llamaService;
@@ -31,42 +33,27 @@ public class ModelDownloadManager
         
         try
         {
-            // Usar diretório de modelos do llama.cpp
+            // Usar diretï¿½rio de modelos do llama.cpp
             var llamaConfig = configuration.GetSection("Llama");
-            var customPath = llamaConfig.GetValue<string>("ModelsPath");
-            
-            if (!string.IsNullOrEmpty(customPath))
+            var configuredModelsPath = llamaConfig.GetValue<string>("ModelsPath");
+            var resolvedPath = string.IsNullOrWhiteSpace(configuredModelsPath)
+                ? "models"
+                : configuredModelsPath;
+
+            var primaryPath = ResolvePath(resolvedPath, environment.ContentRootPath);
+            if (!Directory.Exists(primaryPath))
             {
-                _modelsPath = customPath;
-                _logger.LogInformation("Using custom models path from configuration: {Path}", customPath);
-            }
-            else
-            {
-                // Fallback: usar diretório padrão do llama.cpp
-                var llamaPath = llamaConfig.GetValue<string>("ExecutablePath");
-                
-                if (!string.IsNullOrEmpty(llamaPath) && File.Exists(llamaPath))
+                var runtimePath = ResolvePath(resolvedPath, AppDomain.CurrentDomain.BaseDirectory);
+                if (Directory.Exists(runtimePath))
                 {
-                    var llamaDir = Path.GetDirectoryName(llamaPath);
-                    if (!string.IsNullOrEmpty(llamaDir))
-                    {
-                        _modelsPath = Path.Combine(llamaDir, "models");
-                        _logger.LogInformation("Using llama.cpp models directory: {Path}", _modelsPath);
-                    }
-                    else
-                    {
-                        _modelsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "llama.cpp", "models");
-                        _logger.LogWarning("Could not determine llama directory, using default: {Path}", _modelsPath);
-                    }
-                }
-                else
-                {
-                    _modelsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "llama.cpp", "models");
-                    _logger.LogInformation("Using default models path: {Path}", _modelsPath);
+                    primaryPath = runtimePath;
                 }
             }
+
+            _modelsPath = primaryPath;
+            _logger.LogInformation("Using models path: {Path}", _modelsPath);
             
-            // Garantir que o diretório existe
+            // Garantir que o diretï¿½rio existe
             Directory.CreateDirectory(_modelsPath);
             _logger.LogInformation("? Models directory ready: {ModelsPath}", _modelsPath);
             
@@ -78,7 +65,7 @@ public class ModelDownloadManager
         {
             _logger.LogError(ex, "? Error initializing ModelDownloadManager");
             
-            // Fallback de emergência
+            // Fallback de emergï¿½ncia
             _modelsPath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                 "AgentDock",
@@ -93,21 +80,21 @@ public class ModelDownloadManager
     }
 
     /// <summary>
-    /// Verifica se um arquivo já está sendo baixado ou já existe
+    /// Verifica se um arquivo jï¿½ estï¿½ sendo baixado ou jï¿½ existe
     /// </summary>
     public (bool canDownload, string reason, string? existingDownloadId) CanDownload(string filename)
     {
-        // Verificar se já existe o arquivo completo
+        // Verificar se jï¿½ existe o arquivo completo
         var filePath = Path.Combine(_modelsPath, filename);
         if (File.Exists(filePath))
         {
-            return (false, "Modelo já foi baixado anteriormente", null);
+            return (false, "Modelo jï¿½ foi baixado anteriormente", null);
         }
         
-        // Verificar se está na fila ou em download
+        // Verificar se estï¿½ na fila ou em download
         if (_downloadingFiles.TryGetValue(filename, out var existingId))
         {
-            return (false, "Download já está em andamento", existingId);
+            return (false, "Download jï¿½ estï¿½ em andamento", existingId);
         }
         
         // Verificar downloads ativos
@@ -117,7 +104,7 @@ public class ModelDownloadManager
         
         if (activeDownload != null)
         {
-            return (false, "Download já está em andamento", activeDownload.Id);
+            return (false, "Download jï¿½ estï¿½ em andamento", activeDownload.Id);
         }
         
         return (true, "OK", null);
@@ -297,7 +284,7 @@ public class ModelDownloadManager
             else
             {
                 _logger.LogError("? Downloaded file not found: {Path}", destinationPath);
-                task.ErrorMessage = "Arquivo não encontrado após download";
+                task.ErrorMessage = "Arquivo nï¿½o encontrado apï¿½s download";
             }
 
             // Carregar no llama.cpp em background
@@ -354,6 +341,16 @@ public class ModelDownloadManager
 
         var mbDownloaded = task.DownloadedBytes / 1024.0 / 1024.0;
         return mbDownloaded / elapsed;
+    }
+
+    private static string ResolvePath(string path, string contentRoot)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return Path.Combine(contentRoot, "models");
+
+        return Path.IsPathRooted(path)
+            ? path
+            : Path.GetFullPath(Path.Combine(contentRoot, path));
     }
 }
 

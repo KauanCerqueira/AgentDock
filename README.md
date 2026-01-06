@@ -1,528 +1,219 @@
-# 🚀 AgentDock
+# AgentDock
 
-<div align="center">
+> Open-source desktop app to run local LLMs with an OpenAI-compatible API. Electron + React + .NET 8 + llama.cpp.
 
-![AgentDock Logo](docs/images/logo.png)
+Badges: beta • MIT • Windows/macOS/Linux • .NET 8 • React 18
 
-**An open-source, lightweight desktop application for running local AI models with OpenAI-compatible API**
-
-🎉 **Optimized for Git**: Repository size reduced by 90%+ - binaries downloaded on-demand during setup!
-
-[![Beta](https://img.shields.io/badge/status-beta-yellow.svg)](https://github.com/KauanCerqueira/AgentDock)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![GitHub Release](https://img.shields.io/github/v/release/KauanCerqueira/AgentDock)](https://github.com/KauanCerqueira/AgentDock/releases/latest)
-[![GitHub Downloads](https://img.shields.io/github/downloads/KauanCerqueira/AgentDock/total)](https://github.com/KauanCerqueira/AgentDock/releases)
-[![.NET](https://img.shields.io/badge/.NET-8.0-purple.svg)](https://dotnet.microsoft.com/)
-[![React](https://img.shields.io/badge/React-18.x-blue.svg)](https://react.dev/)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](https://github.com/KauanCerqueira/AgentDock/releases)
-
-[Features](#-features) • [Screenshots](#-screenshots) • [Installation](#-installation) • [Usage](#-usage) • [API](#-api-documentation) • [Contributing](#-contributing)
-
-</div>
+Sections: [English](#english) | [Português](#português)
 
 ---
 
-## ⚠️ Beta Notice
+## English
 
-**AgentDock is currently in beta.** While the core functionality is stable, you may encounter bugs or incomplete features. We appreciate your patience and feedback as we continue development.
+### What it does
+- Local inference with llama.cpp (CPU/GPU) and OpenAI-compatible endpoints (`/v1/chat/completions`, `/v1/models`).
+- Model lifecycle: download from Hugging Face, hardware-aware recommendations, compatibility checks, auto-load into llama.cpp.
+- Desktop UI: chat, API playground, models browser, download manager, analytics, logs, system monitor, presets, tasks, workspaces.
+- Security & ops: API key middleware, streaming responses, Swagger UI, health checks, performance metrics, logging.
+- Extensible backends: llama.cpp first-class; hooks for Ollama/HF service integration.
 
-- **Expect Changes:** APIs and features may change without notice
-- **Report Issues:** Please report bugs via [GitHub Issues](https://github.com/KauanCerqueira/AgentDock/issues)
-- **Backup Your Data:** Always keep backups of important configurations
+### Feature list
+- OpenAI-compatible API (chat completions + streaming, models list).
+- Local llama.cpp server orchestration (start/stop, health wait, configurable host/port/context, GPU layers).
+- Model management: Hugging Face search, file listing, download queue, disk checks, cancel/resume, delete, auto-load after download.
+- Recommendations: hardware detection (RAM/VRAM), score-based suggestions, compatibility badges, warnings for heavy models.
+- UI modules: dashboard, chat, API Playground, models (browse/recommended), downloads, downloaded models, settings, analytics, logs.
+- API keys: bearer token enforcement (default `sk-agentdock-admin`).
+- System monitor: CPU/RAM/GPU/network stats with periodic logging.
+- Swagger UI bundled at `/swagger`.
 
----
+### Install (end users)
+1) Download the latest release: https://github.com/KauanCerqueira/AgentDock/releases/latest
+2) Run the installer for your OS (Windows/macOS/Linux). The app downloads the right llama.cpp build on first run.
+3) Put at least one GGUF model in `src/AgentDock.Backend/models/` (or use the Models page downloader).
 
-## 📋 Overview
+Minimum: Win10/macOS11/Ubuntu20.04, 8 GB RAM (16 GB recommended), AVX CPU, ~10 GB free + space for models.
 
-**AgentDock** is a cross-platform desktop application that allows you to run AI models locally on your machine and interact with them through an **OpenAI-compatible API**. Built with Electron, React, and .NET, AgentDock provides a user-friendly interface for managing models, workspaces, and AI agents while exposing a network-accessible API that works seamlessly with existing OpenAI client libraries.
-
-### 🎯 Key Features
-
-- **🤖 Local AI Models**: Run powerful language models (llama.cpp) directly on your machine
-- **🔌 OpenAI-Compatible API**: Drop-in replacement for OpenAI's API - works with existing tools and libraries
-- **🌐 Network Access**: API accessible on your local network for integration with other applications
-- **📊 Real-time Analytics**: Monitor API usage, request metrics, and model performance
-- **🔑 API Key Management**: Secure your API with bearer token authentication
-- **📦 Model Management**: Download, configure, and switch between different AI models
-- **⚡ Multiple Backends**: Support for llama.cpp (CPU/GPU), Ollama, and HuggingFace
-- **🎨 Modern UI**: Clean, responsive interface built with React and TailwindCSS
-- **📖 Interactive Documentation**: Built-in Swagger UI for API exploration
-- **🔄 Streaming Support**: Real-time streaming responses for chat completions
-
----
-
-## 📸 Screenshots
-
-### Dashboard
-![Dashboard](docs/images/dashboard.png)
-*Monitor system resources, active models, and real-time statistics*
-
-### Chat Interface
-![Chat](docs/images/chat.png)
-*Interact with AI models through an intuitive chat interface*
-
-### API Playground
-![API Playground](docs/images/api-playground.png)
-*Test the API with code examples and connection details*
-
-### Model Management
-![Models](docs/images/models.png)
-*Download, configure, and manage your AI models*
-
-### API Analytics
-![Analytics](docs/images/analytics.png)
-*Track API usage, request metrics, and performance over time*
-
-### Swagger Documentation
-![Swagger](docs/images/swagger.png)
-*Interactive API documentation with dark theme*
-
----
-
-## 🚀 Installation
-
-### 📦 Download Pre-built Installer (Recommended)
-
-The easiest way to get started is downloading the latest release:
-
-1. Visit [**Releases**](https://github.com/KauanCerqueira/AgentDock/releases/latest)
-2. Download the installer for your platform:
-   - **Windows**: `AgentDock-Setup-x.x.x.exe` or `AgentDock-x.x.x-portable.exe`
-   - **macOS**: `AgentDock-x.x.x.dmg`
-   - **Linux**: `AgentDock-x.x.x.AppImage` or `AgentDock-x.x.x.deb`
-3. Run the installer
-4. Launch AgentDock
-5. The app will automatically download the optimal llama.cpp variant for your GPU
-
-> 💡 **Note**: The installer includes only the CPU variant to keep download size small (~100MB).
-> GPU-specific binaries (CUDA, ROCm, SYCL, Vulkan) are downloaded automatically on first run based on your hardware.
-
-### 💾 System Requirements
-
-**Minimum:**
-- **OS**: Windows 10/11, macOS 11+, Ubuntu 20.04+
-- **RAM**: 8 GB (16 GB recommended)
-- **Storage**: 10 GB free space (models require additional space)
-- **CPU**: x64 processor with AVX support
-
-**Recommended for GPU Acceleration:**
-- **NVIDIA GPU**: GTX 1060+ with CUDA 12.4+
-- **AMD GPU**: RX 6000+ with ROCm 5.0+
-- **Intel GPU**: Arc A-Series with oneAPI
-
----
-
-### 🛠️ Building from Source
-
-For developers or those who want to customize AgentDock:
-
-#### Prerequisites
-
-- **Node.js** (v20 or higher) - [Download](https://nodejs.org/)
-- **.NET 8 SDK** - [Download](https://dotnet.microsoft.com/download/dotnet/8.0)
-- **Git** - [Download](https://git-scm.com/)
-
-#### Clone the Repository
+### Build from source (devs)
+Prereqs: Node.js 20+, .NET 8 SDK, Git.
 
 ```bash
 git clone https://github.com/KauanCerqueira/AgentDock.git
 cd AgentDock
+# Windows
+./setup.ps1
+# Linux/macOS
+chmod +x setup.sh && ./setup.sh
 ```
 
-#### Automated Setup
+What setup does: detect GPU, pull suitable llama.cpp binary, install npm deps, prepare UI and backend.
 
-**Windows (PowerShell):**
-```powershell
-.\setup.ps1
-```
-
-**Linux/macOS:**
-```bash
-chmod +x setup.sh
-./setup.sh
-```
-
-The setup script will:
-- Detect your GPU (NVIDIA/AMD/Intel/CPU)
-- Download the optimal llama.cpp binaries automatically
-- Install all npm dependencies
-- Prepare the project for development
-
-#### What Gets Downloaded
-
-The setup script downloads llama.cpp binaries from official releases (~80-300 MB depending on variant):
-
-| GPU Type | Variant | Size | Features |
-|----------|---------|------|----------|
-| None/Unknown | CPU | ~80 MB | AVX, AVX2, AVX512 optimizations |
-| NVIDIA | CUDA 12.4 | ~200 MB | cuBLAS acceleration |
-| AMD | ROCm/HIP | ~250 MB | rocBLAS, hipBLAS acceleration |
-| Intel Arc | SYCL | ~300 MB | oneMKL, oneDNN acceleration |
-| Universal | Vulkan | ~100 MB | Cross-vendor GPU support |
-| Apple Silicon | Metal | ~90 MB | Native Metal acceleration |
-
-#### Manual Setup (Advanced)
-
-If you prefer manual installation or need a specific variant:
-
-```bash
-# Install dependencies
-npm install
-
-# Download specific llama.cpp variant manually
-# Visit: https://github.com/ggerganov/llama.cpp/releases/latest
-# Extract to ./llama.cpp/[variant-name]/
-# Example: ./llama.cpp/cuda-12.4/ for NVIDIA GPUs
-```
-
-### Download AI Models
-
-Place your GGUF model files in `src/AgentDock.Backend/models/` or use the built-in model downloader from the UI.
-
-Example models:
-- [TinyLlama 1.1B](https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF)
-- [Llama 2 7B](https://huggingface.co/TheBloke/Llama-2-7B-Chat-GGUF)
-- [Mistral 7B](https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF)
-
-### Build and Run
-
-#### Development Mode
-
+Dev run:
 ```bash
 npm run dev
+# backend at http://localhost:5000, frontend at http://localhost:5173, Electron dev
 ```
 
-This will start:
-- Backend API server on `http://localhost:5000`
-- Frontend dev server on `http://localhost:5173`
-- Electron app in development mode
-
-#### Production Build
-
+Production build:
 ```bash
 npm run build
 ```
 
-The built application will be in the `dist/` folder.
+Backend only:
+```bash
+cd src/AgentDock.Backend
+dotnet run
+```
 
----
+### Using the API
+Base URL: `http://localhost:5000/v1` • Auth: `Authorization: Bearer sk-agentdock-admin`
 
-## 💻 Usage
-
-### Starting the Application
-
-1. **Launch AgentDock**: Run `npm run dev` or launch the built application
-2. **Select a Model**: Go to the Models page and download or select an AI model
-3. **Start Chatting**: Use the Chat interface to interact with the model
-4. **Access the API**: The API is available at `http://localhost:5000` (or your machine's IP on port 5000)
-
-### Using the OpenAI-Compatible API
-
-AgentDock exposes an OpenAI-compatible API that can be used with any OpenAI client library:
-
-#### Python Example
-
+Python:
 ```python
 from openai import OpenAI
-
-# Point to AgentDock instead of OpenAI
-client = OpenAI(
-    base_url="http://localhost:5000/v1",
-    api_key="sk-agentdock-admin"  # Default API key
-)
-
-# Use exactly like OpenAI's API
-response = client.chat.completions.create(
-    model="default",
-    messages=[
-        {"role": "user", "content": "Hello! How are you?"}
-    ]
-)
-
-print(response.choices[0].message.content)
+client = OpenAI(base_url="http://localhost:5000/v1", api_key="sk-agentdock-admin")
+resp = client.chat.completions.create(model="llama-2-7b-chat.Q2_K.gguf", messages=[{"role":"user","content":"Hi"}])
+print(resp.choices[0].message.content)
 ```
 
-#### Node.js Example
-
+Node.js:
 ```javascript
 import OpenAI from 'openai';
-
-const client = new OpenAI({
-  baseURL: 'http://localhost:5000/v1',
-  apiKey: 'sk-agentdock-admin'
-});
-
-const response = await client.chat.completions.create({
-  model: 'default',
-  messages: [
-    { role: 'user', content: 'Hello! How are you?' }
-  ]
-});
-
-console.log(response.choices[0].message.content);
+const client = new OpenAI({ baseURL: 'http://localhost:5000/v1', apiKey: 'sk-agentdock-admin' });
+const resp = await client.chat.completions.create({ model: 'llama-2-7b-chat.Q2_K.gguf', messages: [{ role:'user', content:'Hi' }] });
+console.log(resp.choices[0].message.content);
 ```
 
-#### cURL Example
-
+cURL:
 ```bash
 curl http://localhost:5000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer sk-agentdock-admin" \
-  -d '{
-    "model": "default",
-    "messages": [
-      {"role": "user", "content": "Hello!"}
-    ]
-  }'
+   -H "Content-Type: application/json" \
+   -H "Authorization: Bearer sk-agentdock-admin" \
+   -d '{"model":"llama-2-7b-chat.Q2_K.gguf","messages":[{"role":"user","content":"Hi"}]}'
 ```
 
-### Network Access
+Swagger: `http://localhost:5000/swagger`
+Health: `http://localhost:5000/api/engine/health`
 
-To access the API from other devices on your network:
+### How to collaborate
+- Issues: https://github.com/KauanCerqueira/AgentDock/issues
+- Pull requests: fork, branch (`feat/*`), tests, PR with context.
+- Conventional commits: feat/fix/docs/style/refactor/test/chore.
+- Keep docs updated when adding features.
 
-1. Get your machine's local IP address (e.g., `192.168.1.100`)
-2. Use this IP in the base URL: `http://192.168.1.100:5000/v1`
-3. Ensure your firewall allows connections on port 5000
+### Project structure (short)
+```
+electron/              # main & preload
+src/AgentDock.Backend/ # ASP.NET Core API, llama.cpp lifecycle, HuggingFace integration
+src/AgentDock.UI/      # React + Vite + Tailwind UI
+llama.cpp/             # packaged binaries & zips
+```
+
+### License
+MIT. See LICENSE.
 
 ---
 
-## 📚 API Documentation
+## Português
 
-### Interactive Swagger UI
+### O que o app faz
+- Inferência local com llama.cpp (CPU/GPU) e endpoints compatíveis com OpenAI (`/v1/chat/completions`, `/v1/models`).
+- Ciclo completo de modelos: busca no Hugging Face, recomendações pelo hardware, checagem de compatibilidade, auto-load no llama.cpp.
+- UI desktop: chat, playground de API, navegador de modelos, gerenciador de downloads, analytics, logs, monitor de sistema, presets, tasks, workspaces.
+- Segurança e operações: middleware de API key, respostas em streaming, Swagger UI, health check, métricas de performance, logging.
+- Backends extensíveis: foco em llama.cpp; ganchos para Ollama/serviços HF.
 
-AgentDock includes a built-in Swagger UI for interactive API documentation:
+### Lista de features
+- API compatível com OpenAI (chat + streaming, lista de modelos).
+- Orquestração do servidor llama.cpp (start/stop, espera de saúde, host/porta/contexto configuráveis, camadas de GPU).
+- Gestão de modelos: busca HF, listagem de arquivos, fila de download, checagem de disco, cancelar, remover, auto-carregar após download.
+- Recomendações: detecção de hardware (RAM/VRAM), pontuação, badges de compatibilidade, alertas para modelos pesados.
+- Módulos UI: dashboard, chat, API Playground, modelos (recomendados e busca), downloads, modelos baixados, configurações, analytics, logs.
+- Chaves de API: bearer obrigatório (padrão `sk-agentdock-admin`).
+- Monitor de sistema: CPU/RAM/GPU/rede com logging periódico.
+- Swagger UI em `/swagger`.
 
-**Access at:** `http://localhost:5000/swagger`
+### Instalação (usuário final)
+1) Baixe a última release: https://github.com/KauanCerqueira/AgentDock/releases/latest
+2) Rode o instalador para seu sistema. Na primeira execução o app baixa o binário correto do llama.cpp.
+3) Coloque ao menos um GGUF em `src/AgentDock.Backend/models/` (ou use a aba de Modelos para baixar).
 
-### Available Endpoints
+Requisitos mínimos: Win10/macOS11/Ubuntu20.04, 8 GB RAM (16 GB recomendado), CPU AVX, ~10 GB livres + espaço para modelos.
 
-#### Chat Completions
+### Build a partir do código (dev)
+Pré-requisitos: Node.js 20+, .NET 8 SDK, Git.
 
-```
-POST /v1/chat/completions
-```
-
-Create a chat completion with streaming or non-streaming responses.
-
-#### List Models
-
-```
-GET /v1/models
-```
-
-Get a list of available AI models.
-
-#### Analytics
-
-```
-GET /api/analytics?timeRange={24h|7d|30d}
-```
-
-Retrieve API usage analytics and metrics.
-
-#### API Keys
-
-```
-GET    /api/apikeys          # List all API keys
-POST   /api/apikeys          # Create a new API key
-DELETE /api/apikeys/{id}     # Revoke an API key
+```bash
+git clone https://github.com/KauanCerqueira/AgentDock.git
+cd AgentDock
+# Windows
+./setup.ps1
+# Linux/macOS
+chmod +x setup.sh && ./setup.sh
 ```
 
-### Authentication
+O script detecta GPU, baixa o binário correto do llama.cpp, instala deps e prepara UI/backend.
 
-All `/v1/*` endpoints require Bearer token authentication:
-
-```
-Authorization: Bearer sk-agentdock-admin
-```
-
-Default API key: `sk-agentdock-admin` (can be changed in settings)
-
----
-
-## 🏗️ Architecture
-
-```
-AgentDock/
-├── electron/               # Electron main process
-│   ├── main.js            # App entry point
-│   ├── preload.js         # Preload scripts
-│   └── dev.js             # Development launcher
-├── src/
-│   ├── AgentDock.Backend/ # .NET 8 Web API
-│   │   ├── Controllers/   # API endpoints
-│   │   ├── Services/      # Business logic
-│   │   ├── Infrastructure/# llama.cpp, Ollama integration
-│   │   └── Core/          # Models, interfaces
-│   └── AgentDock.UI/      # React frontend
-│       ├── src/
-│       │   ├── components/# Reusable components
-│       │   ├── pages/     # Main pages
-│       │   └── api/       # API client
-│       └── public/        # Static assets
-└── llama.cpp/             # Pre-built llama.cpp binaries
+Execução em desenvolvimento:
+```bash
+npm run dev
+# backend em http://localhost:5000, frontend em http://localhost:5173, Electron dev
 ```
 
-### Tech Stack
-
-**Frontend:**
-- React 18
-- TypeScript
-- TailwindCSS
-- Vite
-- React Router
-- i18next (internationalization)
-
-**Backend:**
-- .NET 8
-- ASP.NET Core Web API
-- Swagger/OpenAPI
-- llama.cpp bindings
-
-**Desktop:**
-- Electron
-- Node.js
-
----
-
-## 🤝 Contributing
-
-We welcome contributions! AgentDock is an open-source project and we appreciate your help in making it better.
-
-### How to Contribute
-
-1. **Fork the Repository**
-   ```bash
-   git clone https://github.com/yourusername/agentdock.git
-   cd agentdock
-   ```
-
-2. **Create a Feature Branch**
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
-
-3. **Make Your Changes**
-   - Write clean, readable code
-   - Follow existing code style and conventions
-   - Add comments for complex logic
-   - Test your changes thoroughly
-
-4. **Commit Your Changes**
-   ```bash
-   git add .
-   git commit -m "feat: add your feature description"
-   ```
-
-   Use conventional commit messages:
-   - `feat:` New features
-   - `fix:` Bug fixes
-   - `docs:` Documentation changes
-   - `style:` Code style changes (formatting, etc.)
-   - `refactor:` Code refactoring
-   - `test:` Adding or updating tests
-   - `chore:` Maintenance tasks
-
-5. **Push to Your Fork**
-   ```bash
-   git push origin feature/your-feature-name
-   ```
-
-6. **Open a Pull Request**
-   - Go to the original repository on GitHub
-   - Click "New Pull Request"
-   - Select your feature branch
-   - Describe your changes in detail
-   - Submit the PR for review
-
-### Contribution Guidelines
-
-- **Code Quality**: Ensure your code is clean, well-documented, and follows the project's style
-- **Testing**: Test your changes locally before submitting
-- **Documentation**: Update documentation if you're adding new features
-- **Issue First**: For major changes, open an issue first to discuss your proposal
-- **Be Respectful**: Follow our [Code of Conduct](CODE_OF_CONDUCT.md)
-
-### Development Setup
-
-See the [Installation](#-installation) section for setting up your development environment.
-
-### Areas We Need Help
-
-- 🐛 Bug fixes and testing
-- 📝 Documentation improvements
-- 🌍 Translations (i18n)
-- ✨ New features and enhancements
-- 🎨 UI/UX improvements
-- ⚡ Performance optimizations
-- 🔧 Backend model integrations
-
----
-
-## 📝 License
-
-This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
-
-```
-MIT License
-
-Copyright (c) 2024 AgentDock Contributors
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+Build de produção:
+```bash
+npm run build
 ```
 
----
+Só backend:
+```bash
+cd src/AgentDock.Backend
+dotnet run
+```
 
-## 🙏 Acknowledgments
+### Usando a API
+Base: `http://localhost:5000/v1` • Auth: `Authorization: Bearer sk-agentdock-admin`
 
-- **llama.cpp** - For the excellent C++ implementation of LLaMA inference
-- **OpenAI** - For the API specification that inspired this project
-- **Electron** - For making cross-platform desktop apps possible
-- **React & .NET Community** - For amazing frameworks and tools
+Python:
+```python
+from openai import OpenAI
+client = OpenAI(base_url="http://localhost:5000/v1", api_key="sk-agentdock-admin")
+resp = client.chat.completions.create(model="llama-2-7b-chat.Q2_K.gguf", messages=[{"role":"user","content":"Oi"}])
+print(resp.choices[0].message.content)
+```
 
----
+Node.js:
+```javascript
+import OpenAI from 'openai';
+const client = new OpenAI({ baseURL: 'http://localhost:5000/v1', apiKey: 'sk-agentdock-admin' });
+const resp = await client.chat.completions.create({ model: 'llama-2-7b-chat.Q2_K.gguf', messages: [{ role:'user', content:'Oi' }] });
+console.log(resp.choices[0].message.content);
+```
 
-## 📞 Support & Community
+cURL:
+```bash
+curl http://localhost:5000/v1/chat/completions \
+   -H "Content-Type: application/json" \
+   -H "Authorization: Bearer sk-agentdock-admin" \
+   -d '{"model":"llama-2-7b-chat.Q2_K.gguf","messages":[{"role":"user","content":"Oi"}]}'
+```
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/agentdock/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/agentdock/discussions)
-- **Wiki**: [Documentation Wiki](https://github.com/yourusername/agentdock/wiki)
+Swagger: `http://localhost:5000/swagger`
+Health: `http://localhost:5000/api/engine/health`
 
----
+### Como colaborar
+- Issues: https://github.com/KauanCerqueira/AgentDock/issues
+- Pull requests: fork, branch (`feat/*`), testes, PR com contexto.
+- Commits convencionais: feat/fix/docs/style/refactor/test/chore.
+- Atualize docs ao adicionar features.
 
-## 🗺️ Roadmap
+### Estrutura do projeto (resumo)
+```
+electron/              # main e preload
+src/AgentDock.Backend/ # API ASP.NET Core, ciclo do llama.cpp, integração Hugging Face
+src/AgentDock.UI/      # React + Vite + Tailwind
+llama.cpp/             # binários e zips empacotados
+```
 
-- [ ] Multi-model support (run multiple models simultaneously)
-- [ ] Cloud sync for configurations
-- [ ] Plugin system for custom integrations
-- [ ] Advanced prompt engineering tools
-- [ ] Voice input/output support
-- [ ] Docker deployment option
-- [ ] Model fine-tuning interface
-- [ ] Collaborative workspaces
-
----
-
-<div align="center">
-
-**⭐ Star this repository if you find it helpful!**
-
-Made with ❤️ by the AgentDock community
-
-</div>
+### Licença
+MIT. Veja LICENSE.

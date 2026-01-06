@@ -19,7 +19,7 @@ export default defineConfig({
         },
     },
     build: {
-        outDir: '../AgentDock.Backend/wwwroot',
+        outDir: 'dist',
         emptyOutDir: true,
         sourcemap: true,
         minify: false,

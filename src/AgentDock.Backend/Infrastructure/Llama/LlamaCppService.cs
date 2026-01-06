@@ -4,23 +4,50 @@ using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Hosting;
 
 namespace AgentDock.Backend.Infrastructure.Llama;
 
 /// <summary>
-/// Implementação simples de comunicação com llama.cpp server
+/// Implementaï¿½ï¿½o simples de comunicaï¿½ï¿½o com llama.cpp server
 /// </summary>
 public class LlamaCppService : ILlamaService
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<LlamaCppService> _logger;
     private readonly string _baseUrl;
+    private readonly string _modelsPath;
+    private readonly string? _defaultModelName;
 
-    public LlamaCppService(HttpClient httpClient, ILogger<LlamaCppService> logger, IConfiguration configuration)
+    public LlamaCppService(
+        HttpClient httpClient,
+        ILogger<LlamaCppService> logger,
+        IConfiguration configuration,
+        IHostEnvironment environment)
     {
         _httpClient = httpClient;
         _logger = logger;
-        _baseUrl = configuration["Llama:BaseUrl"] ?? "http://localhost:8080";
+        _defaultModelName = configuration["Llama:DefaultModel"];
+
+        var configuredModelsPath = configuration.GetValue<string>("Llama:ModelsPath") ?? "models";
+        var primaryModelsPath = ResolvePath(configuredModelsPath, environment.ContentRootPath);
+        if (!Directory.Exists(primaryModelsPath))
+        {
+            var runtimeModelsPath = ResolvePath(configuredModelsPath, AppDomain.CurrentDomain.BaseDirectory);
+            if (Directory.Exists(runtimeModelsPath))
+            {
+                primaryModelsPath = runtimeModelsPath;
+            }
+        }
+
+        _modelsPath = primaryModelsPath;
+        Directory.CreateDirectory(_modelsPath);
+
+        var configuredPort = configuration.GetValue<int?>("Llama:Port");
+        var configuredBaseUrl = configuration["Llama:BaseUrl"];
+        _baseUrl = string.IsNullOrWhiteSpace(configuredBaseUrl)
+            ? $"http://127.0.0.1:{configuredPort ?? 8080}"
+            : configuredBaseUrl;
         
         _httpClient.BaseAddress = new Uri(_baseUrl);
         _httpClient.Timeout = TimeSpan.FromMinutes(5);
@@ -32,9 +59,14 @@ public class LlamaCppService : ILlamaService
         {
             _logger.LogInformation("Sending chat request to llama.cpp: Model={Model}", request.Model);
 
+            var modelName = string.IsNullOrWhiteSpace(request.Model)
+                ? _defaultModelName ?? "default"
+                : request.Model;
+
             // llama.cpp usa formato OpenAI-compatible
             var llamaRequest = new
             {
+                model = modelName,
                 messages = request.Messages,
                 temperature = request.Options?.Temperature ?? 0.7,
                 max_tokens = request.Options?.NumPredict ?? 2048,
@@ -71,6 +103,9 @@ public class LlamaCppService : ILlamaService
     {
         var llamaRequest = new
         {
+            model = string.IsNullOrWhiteSpace(request.Model)
+                ? _defaultModelName ?? "default"
+                : request.Model,
             messages = request.Messages,
             temperature = request.Options?.Temperature ?? 0.7,
             max_tokens = request.Options?.NumPredict ?? 2048,
@@ -144,17 +179,17 @@ public class LlamaCppService : ILlamaService
         try
         {
             // Escanear pasta de modelos por arquivos .gguf
-            var modelsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "models");
-            if (!Directory.Exists(modelsPath))
+            if (!Directory.Exists(_modelsPath))
             {
-                Directory.CreateDirectory(modelsPath);
+                Directory.CreateDirectory(_modelsPath);
                 return new ListModelsResponse();
             }
 
-            var ggufFiles = Directory.GetFiles(modelsPath, "*.gguf");
+            var ggufFiles = Directory.GetFiles(_modelsPath, "*.gguf");
             var models = ggufFiles.Select(f => new ModelInfo
             {
                 Name = Path.GetFileNameWithoutExtension(f),
+                Path = f,
                 Size = new FileInfo(f).Length,
                 ModifiedAt = File.GetLastWriteTime(f).ToString("o")
             }).ToList();
@@ -170,9 +205,18 @@ public class LlamaCppService : ILlamaService
 
     public async Task<bool> LoadModelAsync(string modelPath, CancellationToken cancellationToken = default)
     {
-        // llama-server precisa ser reiniciado com o modelo
-        // Por simplicidade, vamos assumir que o modelo já está carregado
-        _logger.LogInformation("Model loading requested: {ModelPath}", modelPath);
+        var fullPath = Path.IsPathRooted(modelPath)
+            ? modelPath
+            : Path.Combine(_modelsPath, modelPath);
+
+        if (!File.Exists(fullPath))
+        {
+            _logger.LogWarning("Requested model not found on disk: {ModelPath}", fullPath);
+            return false;
+        }
+
+        // llama-server today loads a single model at startup; acknowledge request for visibility
+        _logger.LogInformation("Model load requested. Ensure llama-server is running with: {ModelPath}", fullPath);
         await Task.CompletedTask;
         return true;
     }
@@ -236,5 +280,15 @@ public class LlamaCppService : ILlamaService
     private class Delta
     {
         public string? Content { get; set; }
+    }
+
+    private static string ResolvePath(string path, string contentRoot)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return Path.Combine(contentRoot, "models");
+
+        return Path.IsPathRooted(path)
+            ? path
+            : Path.GetFullPath(Path.Combine(contentRoot, path));
     }
 }

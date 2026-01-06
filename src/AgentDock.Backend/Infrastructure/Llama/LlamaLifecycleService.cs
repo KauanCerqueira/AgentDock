@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.Extensions.Hosting;
 
 namespace AgentDock.Backend.Infrastructure.Llama;
 
@@ -9,20 +10,50 @@ public class LlamaLifecycleService : IHostedService, IDisposable
 {
     private readonly ILogger<LlamaLifecycleService> _logger;
     private readonly IConfiguration _configuration;
+    private readonly IHostEnvironment _environment;
     private Process? _llamaProcess;
     private readonly string _llamaServerPath;
     private readonly string _modelsPath;
+    private readonly string? _defaultModelName;
     private readonly int _port;
+    private readonly string _host;
 
-    public LlamaLifecycleService(ILogger<LlamaLifecycleService> logger, IConfiguration configuration)
+    public LlamaLifecycleService(
+        ILogger<LlamaLifecycleService> logger,
+        IConfiguration configuration,
+        IHostEnvironment environment)
     {
         _logger = logger;
         _configuration = configuration;
+        _environment = environment;
 
-        var basePath = AppDomain.CurrentDomain.BaseDirectory;
-        _llamaServerPath = Path.Combine(basePath, "bin", "llama", "llama-server.exe");
-        _modelsPath = Path.Combine(basePath, "models");
+        var configuredServerPath = configuration.GetValue<string>("Llama:ExecutablePath") ?? Path.Combine("bin", "llama", "llama-server.exe");
+        var resolvedServerPath = ResolvePath(configuredServerPath, environment.ContentRootPath);
+        if (!File.Exists(resolvedServerPath))
+        {
+            var runtimeServerPath = ResolvePath(configuredServerPath, AppDomain.CurrentDomain.BaseDirectory);
+            if (File.Exists(runtimeServerPath))
+            {
+                resolvedServerPath = runtimeServerPath;
+            }
+        }
+        _llamaServerPath = resolvedServerPath;
+
+        var configuredModelsPath = configuration.GetValue<string>("Llama:ModelsPath") ?? "models";
+        var resolvedModelsPath = ResolvePath(configuredModelsPath, environment.ContentRootPath);
+        if (!Directory.Exists(resolvedModelsPath))
+        {
+            var runtimeModelsPath = ResolvePath(configuredModelsPath, AppDomain.CurrentDomain.BaseDirectory);
+            if (Directory.Exists(runtimeModelsPath))
+            {
+                resolvedModelsPath = runtimeModelsPath;
+            }
+        }
+        _modelsPath = resolvedModelsPath;
+
+        _defaultModelName = configuration.GetValue<string>("Llama:DefaultModel");
         _port = configuration.GetValue<int>("Llama:Port", 8080);
+        _host = configuration.GetValue<string>("Llama:Host", "127.0.0.1");
 
         Directory.CreateDirectory(_modelsPath);
     }
@@ -30,15 +61,17 @@ public class LlamaLifecycleService : IHostedService, IDisposable
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("Starting llama.cpp server...");
+        _logger.LogInformation("llama-server path: {Path}", _llamaServerPath);
+        _logger.LogInformation("Models path: {ModelsPath}", _modelsPath);
 
-        // Verificar se já está rodando
+        // Verificar se jï¿½ estï¿½ rodando
         if (await IsServerRunningAsync())
         {
             _logger.LogInformation("llama-server already running on port {Port}", _port);
             return;
         }
 
-        // Verificar se binário existe
+        // Verificar se binï¿½rio existe
         if (!File.Exists(_llamaServerPath))
         {
             _logger.LogWarning("llama-server.exe not found at {Path}", _llamaServerPath);
@@ -55,15 +88,31 @@ public class LlamaLifecycleService : IHostedService, IDisposable
             return;
         }
 
-        var defaultModel = models[0]; // Usar primeiro modelo encontrado
-        _logger.LogInformation("Using model: {Model}", Path.GetFileName(defaultModel));
+        string? selectedModel = null;
+        if (!string.IsNullOrWhiteSpace(_defaultModelName))
+        {
+            selectedModel = models.FirstOrDefault(m =>
+                string.Equals(Path.GetFileName(m), _defaultModelName, StringComparison.OrdinalIgnoreCase));
+
+            if (selectedModel == null)
+            {
+                _logger.LogWarning("Configured default model {DefaultModel} not found in {ModelsPath}", _defaultModelName, _modelsPath);
+            }
+        }
+
+        selectedModel ??= models[0]; // Usar primeiro modelo encontrado
+        _logger.LogInformation("Using model: {Model}", Path.GetFileName(selectedModel));
 
         try
         {
+            var ctxSize = _configuration.GetValue<int?>("Llama:ContextSize") ?? 4096;
+            var gpuLayers = _configuration.GetValue<int?>("Llama:GpuLayers") ?? 35;
+
             var startInfo = new ProcessStartInfo
             {
                 FileName = _llamaServerPath,
-                Arguments = $"--model \"{defaultModel}\" --port {_port} --host 127.0.0.1 --ctx-size 4096 --n-gpu-layers 35",
+                Arguments = $"--model \"{selectedModel}\" --port {_port} --host {_host} --ctx-size {ctxSize} --n-gpu-layers {gpuLayers}",
+                WorkingDirectory = Path.GetDirectoryName(_llamaServerPath) ?? AppDomain.CurrentDomain.BaseDirectory,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -127,7 +176,7 @@ public class LlamaLifecycleService : IHostedService, IDisposable
         try
         {
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
-            var response = await client.GetAsync($"http://127.0.0.1:{_port}/health");
+            var response = await client.GetAsync($"http://{_host}:{_port}/health");
             return response.IsSuccessStatusCode;
         }
         catch
@@ -152,6 +201,16 @@ public class LlamaLifecycleService : IHostedService, IDisposable
         }
 
         _logger.LogWarning("llama-server did not become ready within timeout");
+    }
+
+    private static string ResolvePath(string path, string contentRoot)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return Path.Combine(contentRoot, "models");
+
+        return Path.IsPathRooted(path)
+            ? path
+            : Path.GetFullPath(Path.Combine(contentRoot, path));
     }
 
     public void Dispose()

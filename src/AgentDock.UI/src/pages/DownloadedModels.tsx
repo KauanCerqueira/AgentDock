@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
-import { HardDrive, Trash2, CheckCircle, RefreshCw, Download, Sparkles, Play, MessageSquare } from 'lucide-react'
+import { HardDrive, Trash2, CheckCircle, RefreshCw, Download, Sparkles, Play, MessageSquare, Cpu } from 'lucide-react'
 import Layout from '@/components/Layout'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Progress } from '@/components/ui/progress'
 import { toast } from 'sonner'
 
 interface DownloadedModel {
@@ -25,12 +26,37 @@ interface DownloadedModel {
   isReadyToUse: boolean
 }
 
+interface SuggestedModel {
+  modelId: string
+  filename: string
+  requirements: {
+    modelSize: string
+    recommendedRamGb: number
+    quantization: string
+  }
+  compatibility: {
+    performanceEstimate: string
+    level: string
+  }
+  reason: string
+}
+
 export default function DownloadedModels() {
   const [models, setModels] = useState<DownloadedModel[]>([])
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [recommended, setRecommended] = useState<SuggestedModel | null>(null)
+  const [suggestionLoading, setSuggestionLoading] = useState(false)
+  const [downloadingModel, setDownloadingModel] = useState<string | null>(null)
+  const [downloadProgress, setDownloadProgress] = useState<number | null>(null)
 
   useEffect(() => { loadModels() }, [])
+
+  useEffect(() => {
+    if (!loading && models.length === 0) {
+      loadRecommendation()
+    }
+  }, [loading, models.length])
 
   const loadModels = async () => {
     setLoading(true)
@@ -41,12 +67,23 @@ export default function DownloadedModels() {
     finally { setLoading(false) }
   }
 
+  const loadRecommendation = async () => {
+    setSuggestionLoading(true)
+    try {
+      const res = await fetch('http://localhost:5000/api/models/suggestions?limit=1')
+      if (!res.ok) throw new Error('Erro ao buscar sugestï¿½o')
+      const data = await res.json()
+      setRecommended(data.suggestions?.[0] || null)
+    } catch { toast.error('Nï¿½o foi possï¿½vel sugerir um modelo para o llama.cpp') }
+    finally { setSuggestionLoading(false) }
+  }
+
   const deleteModel = async (filename: string) => {
-    if (!confirm(`Excluir "${filename}"?\n\nEssa ação não pode ser desfeita.`)) return
+    if (!confirm(`Excluir "${filename}"?\n\nEssa aï¿½ï¿½o nï¿½o pode ser desfeita.`)) return
     setDeleting(filename)
     try {
       const res = await fetch(`http://localhost:5000/api/models/delete/${encodeURIComponent(filename)}`, { method: 'DELETE' })
-      if (res.ok) { toast.success('Modelo excluído'); loadModels() }
+      if (res.ok) { toast.success('Modelo excluï¿½do'); loadModels() }
       else { const e = await res.json(); toast.error('Erro', { description: e.details }) }
     } catch { toast.error('Erro ao conectar') }
     finally { setDeleting(null) }
@@ -70,6 +107,68 @@ export default function DownloadedModels() {
 
   const totalSize = models.reduce((a, m) => a + m.sizeGb, 0)
 
+  const startRecommendedDownload = async () => {
+    if (!recommended) return
+
+    setDownloadingModel(recommended.filename)
+    setDownloadProgress(0)
+
+    try {
+      const response = await fetch('http://localhost:5000/api/models/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          modelId: recommended.modelId,
+          filename: recommended.filename
+        })
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.error || 'Erro ao iniciar download')
+      }
+
+      const { downloadId } = await response.json()
+      toast.success('Download iniciado', { description: recommended.filename })
+
+      const poll = setInterval(async () => {
+        try {
+          const statusRes = await fetch(`http://localhost:5000/api/models/download/${downloadId}`)
+          if (!statusRes.ok) {
+            clearInterval(poll)
+            return
+          }
+
+          const status = await statusRes.json()
+          setDownloadProgress(status.percentComplete ?? 0)
+
+          if (status.status === 'Completed') {
+            clearInterval(poll)
+            setDownloadProgress(null)
+            setDownloadingModel(null)
+            toast.success('Modelo pronto para usar', { description: recommended.filename })
+            loadModels()
+          }
+
+          if (status.status === 'Failed' || status.status === 'Cancelled') {
+            clearInterval(poll)
+            setDownloadProgress(null)
+            setDownloadingModel(null)
+            toast.error('Download nï¿½o concluï¿½do', { description: status.errorMessage })
+          }
+        } catch {
+          clearInterval(poll)
+          setDownloadProgress(null)
+          setDownloadingModel(null)
+        }
+      }, 1000)
+    } catch (error: any) {
+      setDownloadProgress(null)
+      setDownloadingModel(null)
+      toast.error('Erro ao baixar modelo recomendado', { description: error?.message })
+    }
+  }
+
   return (
     <Layout>
       <div className="space-y-6">
@@ -88,11 +187,86 @@ export default function DownloadedModels() {
         </div>
 
         {loading ? <div className="text-center py-12">Carregando...</div> : models.length === 0 ? (
-          <Card className="p-12 text-center">
-            <Sparkles className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-50" />
-            <h3 className="text-lg font-medium mb-2">Nenhum modelo baixado</h3>
-            <Button onClick={() => window.location.hash = '/models'}><Download className="w-4 h-4 mr-2" />Explorar</Button>
-          </Card>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card className="p-12 text-center">
+              <Sparkles className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+              <h3 className="text-lg font-medium mb-2">Nenhum modelo baixado</h3>
+              <p className="text-sm text-muted-foreground mb-6">Coloque um modelo GGUF na pasta models ou baixe um automaticamente.</p>
+              <div className="flex gap-2 justify-center">
+                <Button variant="outline" onClick={loadModels}><RefreshCw className="w-4 h-4 mr-2" />Recarregar</Button>
+                <Button onClick={() => window.location.hash = '/models'}><Download className="w-4 h-4 mr-2" />Explorar</Button>
+              </div>
+            </Card>
+
+            <Card className="p-6 flex flex-col gap-4">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <HardDrive className="w-5 h-5 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold">Recomendado para o llama.cpp</h3>
+                  <p className="text-sm text-muted-foreground">Baixe um modelo pronto para rodar se a pasta models estiver vazia.</p>
+                </div>
+              </div>
+
+              {suggestionLoading ? (
+                <div className="space-y-2">
+                  <div className="h-4 bg-muted rounded animate-pulse" />
+                  <div className="h-4 bg-muted rounded animate-pulse w-3/4" />
+                  <div className="h-20 bg-muted rounded animate-pulse" />
+                </div>
+              ) : recommended ? (
+                <div className="space-y-3">
+                  <div>
+                    <div className="text-sm font-semibold">{recommended.modelId.split('/').pop()}</div>
+                    <p className="text-xs text-muted-foreground">{recommended.reason}</p>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div className="p-2 rounded border border-border">
+                      <div className="text-muted-foreground">Arquivo</div>
+                      <div className="font-mono truncate" title={recommended.filename}>{recommended.filename}</div>
+                    </div>
+                    <div className="p-2 rounded border border-border">
+                      <div className="text-muted-foreground">RAM</div>
+                      <div className="font-semibold">{recommended.requirements.recommendedRamGb} GB</div>
+                    </div>
+                    <div className="p-2 rounded border border-border">
+                      <div className="text-muted-foreground">Quantizaï¿½ï¿½o</div>
+                      <div className="font-mono">{recommended.requirements.quantization}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 p-3 rounded border border-border">
+                    <Cpu className="w-4 h-4 text-primary" />
+                    <div>
+                      <div className="text-sm font-medium">Pronto para seu hardware</div>
+                      <div className="text-xs text-muted-foreground">{recommended.compatibility.performanceEstimate}</div>
+                    </div>
+                  </div>
+
+                  {downloadProgress !== null && downloadingModel === recommended.filename ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span>Baixando...</span>
+                        <span className="font-mono">{downloadProgress.toFixed(0)}%</span>
+                      </div>
+                      <Progress value={downloadProgress} className="h-2" />
+                    </div>
+                  ) : (
+                    <Button onClick={startRecommendedDownload} disabled={!!downloadingModel}>
+                      <Download className="w-4 h-4 mr-2" />
+                      Baixar modelo recomendado
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">
+                  Nenhuma sugestï¿½o automï¿½tica encontrada. Abra a aba de modelos para escolher manualmente.
+                </div>
+              )}
+            </Card>
+          </div>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
             {models.map(m => (

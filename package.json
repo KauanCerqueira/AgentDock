@@ -72,7 +72,7 @@
     ],
     "win": {
       "target": ["nsis", "portable"],
-      "icon": "electron/assets/icon.ico",
+      "icon": "electron/assets/icon.png",
       "certificateFile": null,
       "certificatePassword": null
     },

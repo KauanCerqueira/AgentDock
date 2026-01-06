@@ -12,19 +12,64 @@ const path = require('path')
 const rootDir = process.cwd()
 const isDev = process.env.BUILD_ENV === 'dev'
 
+// Função para copiar arquivos recursivamente
+function copyDir(src, dest) {
+  if (!fs.existsSync(dest)) {
+    fs.mkdirSync(dest, { recursive: true })
+  }
+  
+  const files = fs.readdirSync(src)
+  files.forEach(file => {
+    const srcFile = path.join(src, file)
+    const destFile = path.join(dest, file)
+    const stat = fs.statSync(srcFile)
+    
+    if (stat.isDirectory()) {
+      copyDir(srcFile, destFile)
+    } else {
+      fs.copyFileSync(srcFile, destFile)
+    }
+  })
+}
+
 class BuildManager {
   constructor() {
     this.steps = [
       { name: 'Clean', fn: () => this.clean() },
       { name: 'Build Backend', fn: () => this.buildBackend() },
       { name: 'Build UI', fn: () => this.buildUI() },
+      { name: 'Copy UI to Backend', fn: () => this.copyUIToBackend() },
       { name: 'Package Electron', fn: () => this.packageElectron() }
     ]
   }
 
   async clean() {
     console.log('\n📦 Cleaning build artifacts...')
-    return this.runCommand('npm', ['run', 'clean'], rootDir)
+    const backendPath = path.join(rootDir, 'src', 'AgentDock.Backend')
+    const uiPath = path.join(rootDir, 'src', 'AgentDock.UI')
+    
+    // Limpar backend
+    const backendBinPath = path.join(backendPath, 'bin')
+    const backendObjPath = path.join(backendPath, 'obj')
+    
+    if (fs.existsSync(backendBinPath)) {
+      fs.rmSync(backendBinPath, { recursive: true, force: true })
+      console.log('  ✓ Cleaned backend bin/')
+    }
+    
+    if (fs.existsSync(backendObjPath)) {
+      fs.rmSync(backendObjPath, { recursive: true, force: true })
+      console.log('  ✓ Cleaned backend obj/')
+    }
+    
+    // Limpar UI
+    const uiDistPath = path.join(uiPath, 'dist')
+    const uiNodeModulesPath = path.join(uiPath, 'node_modules', '.vite')
+    
+    if (fs.existsSync(uiDistPath)) {
+      fs.rmSync(uiDistPath, { recursive: true, force: true })
+      console.log('  ✓ Cleaned UI dist/')
+    }
   }
 
   async buildBackend() {
@@ -52,6 +97,47 @@ class BuildManager {
     }
 
     return this.runCommand('npm', ['run', 'build'], uiPath)
+  }
+
+  async copyUIToBackend() {
+    console.log('\n📋 Copying UI files to Backend wwwroot...')
+    const uiDistPath = path.join(rootDir, 'src', 'AgentDock.UI', 'dist')
+    const wwwrootPath = path.join(rootDir, 'src', 'AgentDock.Backend', 'wwwroot')
+    
+    if (!fs.existsSync(uiDistPath)) {
+      throw new Error(`UI dist path not found: ${uiDistPath}`)
+    }
+    
+    // Limpar wwwroot se existir
+    if (fs.existsSync(wwwrootPath)) {
+      console.log('  Cleaning existing wwwroot...')
+      fs.rmSync(wwwrootPath, { recursive: true, force: true })
+    }
+    
+    // Copiar arquivos
+    console.log(`  Copying from ${uiDistPath} to ${wwwrootPath}`)
+    copyDir(uiDistPath, wwwrootPath)
+    
+    // Verificar se foi copiado
+    if (fs.existsSync(wwwrootPath)) {
+      const files = fs.readdirSync(wwwrootPath)
+      console.log(`  ✓ Copied ${files.length} items to wwwroot`)
+      
+      if (fs.existsSync(path.join(wwwrootPath, 'index.html'))) {
+        console.log('  ✓ index.html found in wwwroot')
+      } else {
+        throw new Error('index.html not found in wwwroot after copy!')
+      }
+    }
+    
+    // Também copiar para a pasta publish se existir (para desenvolvimento)
+    const publishWwwrootPath = path.join(rootDir, 'src', 'AgentDock.Backend', 'bin', 'Release', 'net8.0', 'publish', 'wwwroot')
+    if (fs.existsSync(publishWwwrootPath)) {
+      console.log(`  Also updating publish wwwroot...`)
+      fs.rmSync(publishWwwrootPath, { recursive: true, force: true })
+      copyDir(wwwrootPath, publishWwwrootPath)
+      console.log(`  ✓ Updated publish wwwroot`)
+    }
   }
 
   async packageElectron() {
